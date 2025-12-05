@@ -45,7 +45,10 @@
         dayjs.locale('th');
 
         // --- CONFIG ---
-        const API_URL = 'http://localhost:5000/api'; 
+        
+        // 👇👇👇 แก้ไขเรียบร้อยครับ ใช้ลิงก์ ngrok ของคุณ 👇👇👇
+        const API_URL = 'https://obtrusive-interlinearly-everette.ngrok-free.dev/api'; 
+        
         const LINE_BOT_ID = '@342rmqlv'; 
 
         // --- STATE ---
@@ -97,7 +100,7 @@
                         Swal.fire({
                             icon: 'error',
                             title: 'เชื่อมต่อ Server ไม่ได้',
-                            text: 'กรุณาตรวจสอบว่าได้รัน server.js แล้วหรือไม่ (Port 5000)',
+                            text: 'กรุณาตรวจสอบว่า ngrok ยังทำงานอยู่หรือไม่',
                             toast: true, position: 'top-end', showConfirmButton: false, timer: 5000
                         });
                     }
