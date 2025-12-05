@@ -45,9 +45,9 @@
         dayjs.locale('th');
 
         // --- CONFIG ---
-        // ⚠️ เปลี่ยนเป็น URL ของ Backend ของคุณ (เช่น https://my-car-api.onrender.com/api)
-        // ถ้าทดสอบในเครื่อง ให้ใช้ http://localhost:5000/api
-        const API_URL = 'https://my-car-api.onrender.com/api'; 
+        
+        // 👇👇👇 แก้ไขเรียบร้อยครับ ใช้ลิงก์ ngrok ของคุณ 👇👇👇
+        const API_URL = 'https://obtrusive-interlinearly-everette.ngrok-free.dev/api'; 
         
         const LINE_BOT_ID = '@342rmqlv'; 
 
@@ -70,11 +70,9 @@
             if (saved) state.currentUser = JSON.parse(saved);
         } catch (e) { localStorage.removeItem('carBookingUser'); }
 
-        // --- API CLIENT (Real Backend Connection) ---
+        // --- API CLIENT ---
         const api = {
             login: (data) => axios.post(`${API_URL}/login`, data),
-            
-            // Fetch ALL data from MongoDB via API
             fetchData: async () => {
                 try {
                     const [carsRes, driversRes, bookingsRes] = await Promise.all([
@@ -98,20 +96,17 @@
                     renderApp(); 
                 } catch (error) { 
                     console.error("Fetch Error:", error);
-                    // Show error only if not already shown
                     if(!document.getElementById('connection-error')) {
                         Swal.fire({
                             icon: 'error',
                             title: 'เชื่อมต่อ Server ไม่ได้',
-                            text: 'กรุณาตรวจสอบว่า Backend ทำงานอยู่และ URL ถูกต้อง',
+                            text: 'กรุณาตรวจสอบว่า ngrok ยังทำงานอยู่หรือไม่',
                             toast: true, position: 'top-end', showConfirmButton: false, timer: 5000
                         });
                     }
                     renderApp(); 
                 }
             },
-            
-            // Generic Action Handler
             action: async (method, endpoint, data) => {
                 try {
                     const res = await axios[method](`${API_URL}/${endpoint}`, data);
@@ -170,12 +165,8 @@
                     state.currentUser = userData;
                     state.viewMode = 'dashboard';
                     Swal.fire({ icon: 'success', title: `ยินดีต้อนรับ ${userData.name}`, timer: 1000, showConfirmButton: false });
-                    
-                    // Fetch real data immediately after login
-                    setTimeout(() => { api.fetchData(); }, 500);
-                    
-                    if(user.mustChangePassword) setTimeout(() => openModal('changePwdModal', true), 1000);
-
+                    if(user.mustChangePassword) setTimeout(() => openModal('changePwdModal', true), 500);
+                    else setTimeout(() => { api.fetchData(); }, 500);
                 } catch (err) { Swal.fire({ icon: 'error', title: 'Login Failed', text: err.response?.data?.message || 'เชื่อมต่อไม่ได้' }); }
             });
         }
@@ -760,7 +751,43 @@
         async function openBlockModal(type, id, name) { openModal('blockModal', false, {type, id, name}); }
         async function handleBlockSubmit(e) { e.preventDefault(); const data = Object.fromEntries(new FormData(e.target)); const payload = { ...data, userId: 'ADMIN', status: 'maintenance', useDriver: false, carId: modalData.type==='car'?modalData.id:null, driverId: modalData.type==='driver'?modalData.id:null, remarks: `[ปิด] ${data.remarks}` }; await api.action('post', 'bookings', payload); closeModal(); api.fetchData(); }
         async function startTrip(id, date, time) { const {value:o}=await Swal.fire({title:'เลขไมล์',input:'number'}); if(o) { await api.action('put',`bookings/${id}`,{status:'active',startOdometer:o}); api.fetchData(); } }
-        async function endTrip(id, startOdo) { const {value:o}=await Swal.fire({title:'เลขไมล์จบ',input:'number'}); if(o && Number(o)>startOdo) { await api.action('put',`bookings/${id}`,{status:'completed',endOdometer:o}); api.fetchData(); } else if(o) Swal.fire('ไมล์ผิด'); }
+        
+        // 🔥 UPDATE: End Trip with Fuel/Toll Input
+        async function endTrip(id, startOdo) { 
+            const { value: formValues } = await Swal.fire({
+                title: 'บันทึกการคืนรถ',
+                html:
+                    `<input id="swal-odo" class="swal2-input" placeholder="เลขไมล์สิ้นสุด (ต้องมากกว่า ${startOdo})">` +
+                    `<input id="swal-fuel" class="swal2-input" placeholder="ค่าน้ำมัน (บาท)">` +
+                    `<input id="swal-toll" class="swal2-input" placeholder="ค่าทางด่วน (บาท)">`,
+                focusConfirm: false,
+                preConfirm: () => {
+                    const odo = document.getElementById('swal-odo').value;
+                    const fuel = document.getElementById('swal-fuel').value;
+                    const toll = document.getElementById('swal-toll').value;
+                    if (!odo || Number(odo) <= startOdo) {
+                        Swal.showValidationMessage(`เลขไมล์ต้องมากกว่า ${startOdo}`);
+                        return false;
+                    }
+                    return { 
+                        endOdometer: Number(odo), 
+                        fuelCost: fuel ? Number(fuel) : 0, 
+                        tollCost: toll ? Number(toll) : 0 
+                    };
+                }
+            });
+
+            if (formValues) {
+                await api.action('put', `bookings/${id}`, { 
+                    status: 'completed', 
+                    endOdometer: formValues.endOdometer,
+                    fuelCost: formValues.fuelCost,
+                    tollCost: formValues.tollCost
+                });
+                api.fetchData();
+            }
+        }
+
         async function cancelBooking(id) { if((await Swal.fire({title:'ยกเลิก?',showCancelButton:true})).isConfirmed) { await api.action('put',`bookings/${id}`,{status:'cancelled',cancelledBy:state.currentUser.username}); api.fetchData(); } }
         async function rejectBooking(id) { const {value:r}=await Swal.fire({title:'เหตุผล',input:'text'}); if(r) { await api.action('put',`bookings/${id}`,{status:'rejected',rejectionReason:r}); api.fetchData(); } }
         async function handleChangePwdSubmit(e) { e.preventDefault(); const res = await api.action('post', 'change-password', { userId: state.currentUser.id, ...Object.fromEntries(new FormData(e.target)) }); if(res.success) { Swal.fire('สำเร็จ'); closeModal(); if(state.currentUser.mustChangePassword) logout(); } else Swal.fire('Error', res.message); }
