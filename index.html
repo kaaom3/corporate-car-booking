@@ -45,10 +45,7 @@
         dayjs.locale('th');
 
         // --- CONFIG ---
-        
-        // 👇👇👇 แก้ไขเรียบร้อยครับ ใช้ลิงก์ ngrok ของคุณ 👇👇👇
         const API_URL = 'https://obtrusive-interlinearly-everette.ngrok-free.dev/api'; 
-        
         const LINE_BOT_ID = '@342rmqlv'; 
 
         // --- STATE ---
@@ -100,7 +97,7 @@
                         Swal.fire({
                             icon: 'error',
                             title: 'เชื่อมต่อ Server ไม่ได้',
-                            text: 'กรุณาตรวจสอบว่า ngrok ยังทำงานอยู่หรือไม่',
+                            text: 'กรุณาตรวจสอบว่าได้รัน server.js แล้วหรือไม่ (Port 5000)',
                             toast: true, position: 'top-end', showConfirmButton: false, timer: 5000
                         });
                     }
@@ -338,16 +335,15 @@
 
             container.innerHTML = `
                 <div class="space-y-6">
-                    <div class="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-xl p-6 text-white shadow-lg flex flex-col md:flex-row justify-between items-center gap-6 relative overflow-hidden">
-                        <div class="absolute right-0 top-0 opacity-10 p-4"><i data-lucide="activity" class="w-48 h-48"></i></div>
-                        <div class="flex items-center gap-4 relative z-10">
+                    <div class="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-xl p-6 text-white shadow-lg flex flex-col md:flex-row justify-between items-center gap-6">
+                        <div class="flex items-center gap-4">
                             <div class="bg-white/20 p-3 rounded-full"><i data-lucide="calendar-check" class="w-8 h-8"></i></div>
                             <div>
                                 <h3 class="font-bold text-lg">สรุปงานวันนี้ (${today.format('DD/MM/YYYY')})</h3>
                                 <p class="text-blue-100 text-sm">ภาพรวมการใช้งานทรัพยากร</p>
                             </div>
                         </div>
-                        <div class="flex gap-8 text-center relative z-10">
+                        <div class="flex gap-8 text-center">
                             <div>
                                 <div class="text-3xl font-bold">${todayBookings.length}</div>
                                 <div class="text-xs text-blue-200 uppercase">งานทั้งหมด</div>
@@ -363,10 +359,6 @@
                                 <div class="text-xs text-blue-200 uppercase">คนขับที่ทำงาน</div>
                             </div>
                         </div>
-                        <!-- NEW: Export Button -->
-                        <button onclick="exportToCSV()" class="absolute top-4 right-4 bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-1.5 rounded flex items-center gap-2 border border-white/20 transition z-10">
-                            <i data-lucide="download" class="w-4 h-4"></i> Export CSV
-                        </button>
                     </div>
 
                     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -386,47 +378,6 @@
                     </div>
                 </div>
             `;
-        }
-
-        // --- NEW: Export CSV Function ---
-        function exportToCSV() {
-            const bookings = state.bookings;
-            if (bookings.length === 0) {
-                Swal.fire('ไม่มีข้อมูล', 'ยังไม่มีรายการจองในระบบ', 'info');
-                return;
-            }
-
-            // CSV Header
-            let csvContent = "\uFEFF"; // BOM for Thai support
-            csvContent += "Date,Time,User,Car,Driver,Status,StartOdo,EndOdo,FuelCost,TollCost\n";
-
-            bookings.forEach(b => {
-                const user = state.users.find(u => u.username === b.userId);
-                const car = state.cars.find(c => c._id === b.carId);
-                const driver = state.drivers.find(d => d._id === b.driverId);
-                
-                const row = [
-                    `${b.startDate}`,
-                    `${b.startTime}-${b.endTime}`,
-                    `"${user ? user.firstName + ' ' + user.lastName : b.userId}"`,
-                    `"${car ? car.name : '-'}"`,
-                    `"${driver ? driver.name : '-'}"`,
-                    `"${b.status}"`,
-                    b.startOdometer || 0,
-                    b.endOdometer || 0,
-                    b.fuelCost || 0,
-                    b.tollCost || 0
-                ].join(",");
-                csvContent += row + "\n";
-            });
-
-            const encodedUri = encodeURI("data:text/csv;charset=utf-8," + csvContent);
-            const link = document.createElement("a");
-            link.setAttribute("href", encodedUri);
-            link.setAttribute("download", `booking_report_${dayjs().format('YYYY-MM-DD')}.csv`);
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
         }
 
         function renderCharts() {
@@ -510,7 +461,6 @@
                         ${b.endOdometer ? `
                             <div class="flex justify-between items-center"><span class="text-gray-500">ไมล์สิ้นสุด:</span> <span class="font-bold">${b.endOdometer}</span></div>
                             <div class="flex justify-between items-center text-green-600 pt-1 border-t"><span class="font-bold">ระยะทางรวม:</span> <span class="font-bold">${b.endOdometer - b.startOdometer} กม.</span></div>
-                            <div class="flex justify-between items-center text-gray-500 pt-1 border-t mt-1"><span>ค่าน้ำมัน: ${b.fuelCost}</span> <span>ทางด่วน: ${b.tollCost}</span></div>
                         ` : '<div class="text-orange-500 text-[10px]">* กำลังเดินทาง</div>'}
                     </div>`;
                 }
@@ -751,43 +701,7 @@
         async function openBlockModal(type, id, name) { openModal('blockModal', false, {type, id, name}); }
         async function handleBlockSubmit(e) { e.preventDefault(); const data = Object.fromEntries(new FormData(e.target)); const payload = { ...data, userId: 'ADMIN', status: 'maintenance', useDriver: false, carId: modalData.type==='car'?modalData.id:null, driverId: modalData.type==='driver'?modalData.id:null, remarks: `[ปิด] ${data.remarks}` }; await api.action('post', 'bookings', payload); closeModal(); api.fetchData(); }
         async function startTrip(id, date, time) { const {value:o}=await Swal.fire({title:'เลขไมล์',input:'number'}); if(o) { await api.action('put',`bookings/${id}`,{status:'active',startOdometer:o}); api.fetchData(); } }
-        
-        // 🔥 UPDATE: End Trip with Fuel/Toll Input
-        async function endTrip(id, startOdo) { 
-            const { value: formValues } = await Swal.fire({
-                title: 'บันทึกการคืนรถ',
-                html:
-                    `<input id="swal-odo" class="swal2-input" placeholder="เลขไมล์สิ้นสุด (ต้องมากกว่า ${startOdo})">` +
-                    `<input id="swal-fuel" class="swal2-input" placeholder="ค่าน้ำมัน (บาท)">` +
-                    `<input id="swal-toll" class="swal2-input" placeholder="ค่าทางด่วน (บาท)">`,
-                focusConfirm: false,
-                preConfirm: () => {
-                    const odo = document.getElementById('swal-odo').value;
-                    const fuel = document.getElementById('swal-fuel').value;
-                    const toll = document.getElementById('swal-toll').value;
-                    if (!odo || Number(odo) <= startOdo) {
-                        Swal.showValidationMessage(`เลขไมล์ต้องมากกว่า ${startOdo}`);
-                        return false;
-                    }
-                    return { 
-                        endOdometer: Number(odo), 
-                        fuelCost: fuel ? Number(fuel) : 0, 
-                        tollCost: toll ? Number(toll) : 0 
-                    };
-                }
-            });
-
-            if (formValues) {
-                await api.action('put', `bookings/${id}`, { 
-                    status: 'completed', 
-                    endOdometer: formValues.endOdometer,
-                    fuelCost: formValues.fuelCost,
-                    tollCost: formValues.tollCost
-                });
-                api.fetchData();
-            }
-        }
-
+        async function endTrip(id, startOdo) { const {value:o}=await Swal.fire({title:'เลขไมล์จบ',input:'number'}); if(o && Number(o)>startOdo) { await api.action('put',`bookings/${id}`,{status:'completed',endOdometer:o}); api.fetchData(); } else if(o) Swal.fire('ไมล์ผิด'); }
         async function cancelBooking(id) { if((await Swal.fire({title:'ยกเลิก?',showCancelButton:true})).isConfirmed) { await api.action('put',`bookings/${id}`,{status:'cancelled',cancelledBy:state.currentUser.username}); api.fetchData(); } }
         async function rejectBooking(id) { const {value:r}=await Swal.fire({title:'เหตุผล',input:'text'}); if(r) { await api.action('put',`bookings/${id}`,{status:'rejected',rejectionReason:r}); api.fetchData(); } }
         async function handleChangePwdSubmit(e) { e.preventDefault(); const res = await api.action('post', 'change-password', { userId: state.currentUser.id, ...Object.fromEntries(new FormData(e.target)) }); if(res.success) { Swal.fire('สำเร็จ'); closeModal(); if(state.currentUser.mustChangePassword) logout(); } else Swal.fire('Error', res.message); }
@@ -845,11 +759,6 @@
                 const distance = b.endOdometer && b.startOdometer ? (b.endOdometer - b.startOdometer) + ' km' : '-';
                 const statusColor = b.status === 'active' ? 'text-green-600' : (b.status==='completed' ? 'text-gray-600' : 'text-blue-600');
                 
-                // Add Cost Display in Modal
-                const costs = b.fuelCost || b.tollCost 
-                    ? `<br><span class="text-xs text-orange-500">น้ำมัน: ${b.fuelCost || 0} / ทางด่วน: ${b.tollCost || 0}</span>` 
-                    : '';
-
                 return `
                 <tr class="border-b text-sm">
                     <td class="p-3">${b.startDate}<br><span class="text-xs text-gray-400">${b.startTime}</span></td>
@@ -859,10 +768,7 @@
                         ${b.startOdometer || '-'}<br>
                         <span class="text-xs text-gray-400">จบ: ${b.endOdometer || '-'}</span>
                     </td>
-                    <td class="p-3 text-right">
-                        <div class="font-bold">${distance}</div>
-                        ${costs}
-                    </td>
+                    <td class="p-3 text-right font-bold">${distance}</td>
                     <td class="p-3 text-right uppercase ${statusColor} text-xs font-bold">${b.status}</td>
                 </tr>`;
             }).join('');
@@ -876,7 +782,7 @@
                                 <th class="p-3">ผู้ใช้</th>
                                 <th class="p-3">งาน</th>
                                 <th class="p-3 text-right">ไมล์ (เริ่ม/จบ)</th>
-                                <th class="p-3 text-right">ระยะทาง/ค่าใช้จ่าย</th>
+                                <th class="p-3 text-right">ระยะทาง</th>
                                 <th class="p-3 text-right">สถานะ</th>
                             </tr>
                         </thead>
