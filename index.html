@@ -66,7 +66,6 @@
         // 🔥 AXIOS INTERCEPTOR: Handle 401/403 (Token Expired)
         axios.interceptors.response.use(response => response, error => {
             if (error.response && (error.response.status === 401 || error.response.status === 403)) {
-                // If it's a login attempt, don't auto-logout yet, let the form handle it
                 if (!error.config.url.includes('/login')) {
                     Swal.fire({
                         icon: 'warning',
@@ -133,7 +132,6 @@
                     renderApp(); 
                 } catch (error) { 
                     console.error("Fetch Error:", error);
-                    // Error is handled by interceptor if 401/403
                     if (error.response?.status !== 401 && error.response?.status !== 403) {
                          if(!document.getElementById('connection-error')) {
                             Swal.fire({
@@ -197,7 +195,6 @@
                 try {
                     const res = await api.login(data);
                     
-                    // 🔐 Store Token & User (Updated)
                     const { token, user } = res.data;
                     const userData = {
                         name: user.firstName ? `${user.firstName} ${user.lastName}` : user.username,
@@ -783,6 +780,11 @@
             const allowTime = new Date(now.getTime() - 10 * 60000); 
             if (start < allowTime) return Swal.fire('Error', 'ห้ามจองย้อนหลัง (เกิน 10 นาที)');
             if (start >= end) return Swal.fire('Error', 'เวลาคืนรถต้องหลังเวลารับรถ');
+            
+            // 🔥 Basic Client-Side Validation (Fast Feedback)
+            const diffMs = end - start;
+            if (diffMs < 30 * 60000) return Swal.fire('Error', 'ระยะเวลาจองขั้นต่ำ 30 นาที');
+
             const res = await api.action('post', 'bookings', { userId: state.currentUser.username, ...data }); 
             if(res.success) { Swal.fire('Success','จองสำเร็จ','success'); api.fetchData(); } else { Swal.fire('Error', res.message); }
         }
