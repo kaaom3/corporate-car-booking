@@ -26,6 +26,7 @@
         .modal.show { opacity: 1; pointer-events: auto; }
         .modal-content { transform: scale(0.95); transition: transform 0.2s ease; }
         .modal.show .modal-content { transform: scale(1); }
+        
         .calendar-day { min-height: 120px; transition: all 0.2s; }
         .calendar-day:hover { background-color: #f9fafb; }
         .event-pill { cursor: pointer; transition: transform 0.1s; }
@@ -44,24 +45,14 @@
         dayjs.locale('th');
 
         // --- CONFIG ---
-        // เปลี่ยน URL ตรงนี้ให้ถูกต้อง
+        // 👇 ใส่ลิงก์ ngrok ของคุณที่นี่ (อย่าลืม /api)
         const API_URL = 'https://obtrusive-interlinearly-everette.ngrok-free.dev/api'; 
+        
         const LINE_BOT_ID = '@342rmqlv'; 
 
-        // 🔥 SETUP AXIOS: ใส่ Token ในทุก Request + ดักจับ 401/403
-        axios.interceptors.request.use(config => {
-            const token = localStorage.getItem('authToken');
-            if (token) config.headers.Authorization = `Bearer ${token}`;
-            // config.headers['ngrok-skip-browser-warning'] = 'true'; // ใช้ถ้าต่อ ngrok
-            return config;
-        });
-
-        axios.interceptors.response.use(response => response, error => {
-            if (error.response && (error.response.status === 401 || error.response.status === 403)) {
-                Swal.fire('Session หมดอายุ', 'กรุณาเข้าสู่ระบบใหม่', 'warning').then(() => logout());
-            }
-            return Promise.reject(error);
-        });
+        // 🔥 FIX: แก้ปัญหา ngrok ไม่ส่งข้อมูล (Skip Warning Page)
+        axios.defaults.headers.common['ngrok-skip-browser-warning'] = 'true';
+        axios.defaults.headers.common['User-Agent'] = 'CarBookingApp'; // หลอกว่าเป็นแอป
 
         // --- STATE ---
         const state = {
@@ -92,6 +83,7 @@
                         axios.get(`${API_URL}/drivers`).catch(()=>({data:[]})),
                         axios.get(`${API_URL}/bookings`).catch(()=>({data:[]}))
                     ]);
+
                     state.cars = Array.isArray(carsRes.data) ? carsRes.data : [];
                     state.drivers = Array.isArray(driversRes.data) ? driversRes.data : [];
                     state.bookings = Array.isArray(bookingsRes.data) ? bookingsRes.data : [];
@@ -105,7 +97,18 @@
                         state.stats = statsRes.data || { carStats: [], deptStats: [], driverStats: [] };
                     }
                     renderApp(); 
-                } catch (error) { console.error("Fetch Error:", error); }
+                } catch (error) { 
+                    console.error("Fetch Error:", error);
+                    if(!document.getElementById('connection-error')) {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'เชื่อมต่อ Server ไม่ได้',
+                            text: 'กรุณาตรวจสอบลิงก์ ngrok หรือ Server',
+                            toast: true, position: 'top-end', showConfirmButton: false, timer: 5000
+                        });
+                    }
+                    renderApp(); 
+                }
             },
             action: async (method, endpoint, data) => {
                 try {
@@ -156,28 +159,19 @@
                 const data = Object.fromEntries(new FormData(e.target));
                 try {
                     const res = await api.login(data);
-                    const { user, token } = res.data;
-                    
-                    // 🔥 เก็บ Token และ User ลงเครื่อง
-                    localStorage.setItem('authToken', token);
-                    localStorage.setItem('carBookingUser', JSON.stringify(user));
-                    
-                    state.currentUser = user;
+                    const user = res.data;
+                    const userData = {
+                        name: user.firstName ? `${user.firstName} ${user.lastName}` : user.username,
+                        username: user.username, role: user.role, id: user._id, mustChangePassword: user.mustChangePassword
+                    };
+                    localStorage.setItem('carBookingUser', JSON.stringify(userData));
+                    state.currentUser = userData;
                     state.viewMode = 'dashboard';
-                    Swal.fire({ icon: 'success', title: `ยินดีต้อนรับ ${user.firstName}`, timer: 1000, showConfirmButton: false });
-                    setTimeout(() => { api.fetchData(); }, 500);
-                } catch (err) { 
-                    console.error(err);
-                    Swal.fire({ icon: 'error', title: 'Login Failed', text: err.response?.data?.message || 'เชื่อมต่อไม่ได้' }); 
-                }
+                    Swal.fire({ icon: 'success', title: `ยินดีต้อนรับ ${userData.name}`, timer: 1000, showConfirmButton: false });
+                    if(user.mustChangePassword) setTimeout(() => openModal('changePwdModal', true), 500);
+                    else setTimeout(() => { api.fetchData(); }, 500);
+                } catch (err) { Swal.fire({ icon: 'error', title: 'Login Failed', text: err.response?.data?.message || 'เชื่อมต่อไม่ได้' }); }
             });
-        }
-
-        function logout() {
-            localStorage.removeItem('carBookingUser');
-            localStorage.removeItem('authToken'); // 🔥 ลบ Token ออก
-            state.currentUser = null;
-            renderApp();
         }
 
         function renderNavbar(container) {
@@ -186,17 +180,20 @@
             nav.innerHTML = `
                 <div class="flex items-center gap-3 font-bold text-xl text-gray-800"><i data-lucide="car" class="text-blue-600"></i> <span>${state.currentUser.role === 'admin' ? 'Admin Panel' : 'User Dashboard'}</span></div>
                 <div class="flex items-center gap-3">
-                    <button onclick="openLineQR()" class="bg-[#06C755] text-white hover:bg-[#05b34c] px-3 py-2 rounded-full flex items-center gap-2 text-xs font-bold transition shadow-sm">
-                        <i data-lucide="bell" class="w-4 h-4"></i> <span>เชื่อมต่อ LINE</span>
+                    <button onclick="openLineQR()" class="bg-[#06C755] text-white hover:bg-[#05b34c] px-3 py-2 rounded-full flex items-center gap-2 text-xs font-bold transition shadow-sm" title="กดเพื่อเชื่อมต่อ LINE Bot">
+                        <i data-lucide="bell" class="w-4 h-4"></i> <span>เชื่อมต่อ LINE รับแจ้งเตือน</span>
                     </button>
+                    
                     <div class="flex items-center gap-2 bg-gray-100 rounded-full pl-3 pr-1 py-1 border">
                         <i data-lucide="user" class="w-4 h-4 text-gray-500"></i>
-                        <span class="text-sm font-medium text-gray-700 mr-2">${state.currentUser.firstName}</span>
-                        <button onclick="openModal('changePwdModal')" class="bg-white text-gray-500 hover:text-blue-600 hover:bg-blue-50 p-1.5 rounded-full transition shadow-sm">
+                        <span class="text-sm font-medium text-gray-700 mr-2">${state.currentUser.name}</span>
+                        
+                        <button onclick="openModal('changePwdModal')" class="bg-white text-gray-500 hover:text-blue-600 hover:bg-blue-50 p-1.5 rounded-full transition shadow-sm" title="เปลี่ยนรหัสผ่าน">
                             <i data-lucide="key" class="w-4 h-4"></i>
                         </button>
                     </div>
-                    <button onclick="logout()" class="text-red-500 hover:bg-red-50 p-2 rounded-full transition"><i data-lucide="log-out" class="w-5 h-5"></i></button>
+
+                    <button onclick="logout()" class="text-red-500 hover:bg-red-50 p-2 rounded-full transition" title="ออกจากระบบ"><i data-lucide="log-out" class="w-5 h-5"></i></button>
                 </div>`;
             container.appendChild(nav);
         }
