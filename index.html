@@ -525,10 +525,134 @@
                 } catch (e) {}
             }
         }
-        function renderCalendar(container) { /* Same as before */ container.innerHTML = '<div class="p-10 text-center text-gray-400">Calendar view is working... (Re-add implementation from previous snippet)</div>'; } 
-        function renderCharts() { /* Same as before */ }
+        function renderCalendar(container) { 
+            const dayjs = window.dayjs;
+            if (!dayjs) { container.innerHTML = '<div class="text-center text-red-500">Calendar Error: Day.js not loaded</div>'; return; }
+            dayjs.locale('th'); 
+            const now = dayjs(state.currentDate);
+            const monthStart = now.startOf('month');
+            const monthEnd = now.endOf('month');
+            const startDate = monthStart.startOf('week');
+            const endDate = monthEnd.endOf('week');
+            let days = [];
+            let day = startDate;
+            
+            // Logic to disable "Prev" button if user tries to go back past current month (for normal user)
+            const isUser = state.currentUser.role === 'user';
+            const realToday = dayjs();
+            const isCurrentMonth = now.isSame(realToday, 'month');
+            const disablePrev = isUser && (now.isBefore(realToday, 'month') || isCurrentMonth);
+
+            while (day.isBefore(endDate) || day.isSame(endDate, 'day')) {
+                const dateStr = day.format('D');
+                const isToday = day.isSame(dayjs(), 'day');
+                const isOtherMonth = !day.isSame(monthStart, 'month');
+                const dayBookings = (state.bookings || []).filter(b => { return dayjs(b.startDate).isSame(day, 'day'); });
+                const dots = dayBookings.map(b => {
+                        let colorClass = 'bg-gray-300';
+                        if(b.status === 'approved') colorClass = 'bg-blue-600';
+                        else if(b.status === 'active') colorClass = 'bg-green-600';
+                        else if(b.status === 'pending') colorClass = 'bg-yellow-500';
+                        else if(b.status === 'rejected' || b.status === 'maintenance') colorClass = 'bg-red-500';
+                        return `
+                        <div onclick="showBookingDetails('${b._id}')" class="event-pill ${colorClass} text-white px-2 py-0.5 rounded text-[10px] mb-1 truncate shadow-sm flex items-center gap-1" title="${b.remarks}">
+                            <span class="opacity-75">${b.startTime}</span>
+                            <span class="font-medium">${b.remarks}</span>
+                        </div>`;
+                }).join('');
+                days.push(`
+                    <div class="calendar-day border-b border-r p-1 bg-white flex flex-col ${isOtherMonth ? 'bg-gray-50 text-gray-400' : ''}">
+                        <div class="text-right text-xs font-bold mb-1 p-1">
+                            <span class="${isToday ? 'bg-blue-600 text-white rounded-full w-6 h-6 inline-flex items-center justify-center' : ''}">${dateStr}</span>
+                        </div>
+                        <div class="flex-1 overflow-hidden">
+                            ${dots}
+                        </div>
+                    </div>
+                `);
+                day = day.add(1, 'day');
+            }
+            container.innerHTML = `
+                <div class="bg-white p-6 rounded-xl shadow-sm border h-full flex flex-col">
+                    <div class="flex justify-between items-center mb-6">
+                        <div class="flex items-center gap-2">
+                             <button onclick="changeMonth(-1)" ${disablePrev ? 'disabled class="p-2 text-gray-300 cursor-not-allowed"' : 'class="p-2 hover:bg-gray-100 rounded-full transition"'}><i data-lucide="chevron-left"></i></button>
+                             <button onclick="resetToToday()" class="px-3 py-1 text-sm bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 font-bold transition">วันนี้</button>
+                             <button onclick="changeMonth(1)" class="p-2 hover:bg-gray-100 rounded-full transition"><i data-lucide="chevron-right"></i></button>
+                        </div>
+                        <h3 class="font-bold text-xl text-gray-800 flex items-center gap-2"><i data-lucide="calendar" class="text-blue-600"></i> ${now.format('MMMM YYYY')}</h3>
+                    </div>
+                    <div class="flex-1 border border-gray-200 rounded-lg overflow-hidden flex flex-col">
+                         <div class="grid grid-cols-7 gap-0 bg-gray-100 border-b">
+                            ${['อา','จ','อ','พ','พฤ','ศ','ส'].map(d=>`<div class="py-3 text-center text-xs font-bold text-gray-500">${d}</div>`).join('')}
+                        </div>
+                        <div class="grid grid-cols-7 gap-0 flex-1">${days.join('')}</div>
+                    </div>
+                    <div class="mt-4 flex gap-4 text-xs text-gray-500 justify-center">
+                        <div class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-yellow-500"></span> รออนุมัติ</div>
+                        <div class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-blue-600"></span> อนุมัติแล้ว</div>
+                        <div class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-green-600"></span> กำลังเดินทาง</div>
+                        <div class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-red-500"></span> แจ้งซ่อม/ไม่อนุมัติ</div>
+                    </div>
+                </div>`;
+        } 
+        function renderCharts() { 
+            if (!state.stats) return;
+            const createChart = (id, type, labels, data, colors) => {
+                const ctx = document.getElementById(id);
+                if (!ctx) return;
+                const existingChart = Chart.getChart(ctx);
+                if (existingChart) existingChart.destroy();
+                new Chart(ctx, { type: type, data: { labels: labels, datasets: [{ label: 'Data', data: data, backgroundColor: colors, borderWidth: 1 }] }, options: { responsive: true, maintainAspectRatio: false, indexAxis: type === 'bar' && id === 'driverChart' ? 'y' : 'x', plugins: { legend: { display: type === 'doughnut' } } } });
+            };
+            try {
+                createChart('carChart', 'bar', (state.stats.carStats||[]).map(x=>x.name), (state.stats.carStats||[]).map(x=>x.count), '#3b82f6');
+                createChart('driverChart', 'bar', (state.stats.driverStats||[]).map(x=>x.name), (state.stats.driverStats||[]).map(x=>x.count), '#10b981');
+                createChart('deptChart', 'doughnut', (state.stats.deptStats||[]).map(x=>x.name), (state.stats.deptStats||[]).map(x=>x.count), ['#FF6384','#36A2EB','#FFCE56','#4BC0C0']);
+            } catch (e) { console.error("Chart Error:", e); }
+        }
         function switchView(mode) { state.viewMode = mode; renderApp(); }
         function logout() { localStorage.removeItem('carBookingUser'); localStorage.removeItem('authToken'); state.currentUser = null; renderApp(); }
+        function hardReset() { localStorage.clear(); location.reload(); }
+        function changeMonth(n) { if(window.dayjs){ state.currentDate = window.dayjs(state.currentDate).add(n, 'month').toDate(); renderApp(); } }
+        function resetToToday() { state.currentDate = new Date(); renderApp(); }
+        
+        function showBookingDetails(id) {
+            const b = state.bookings.find(x => x._id === id);
+            if(!b) return;
+            const car = state.cars.find(c => c._id === b.carId) || {name: '-', plate: '-'}; // Handle string ID from unpopulated API just in case
+            const carName = b.carId?.name || car.name || '-';
+            const carPlate = b.carId?.plate || car.plate || '-';
+            
+            const driver = state.drivers.find(d => d._id === b.driverId) || {name: '-', phone: '-'};
+            const driverName = b.driverId?.name || driver.name || '-';
+            const driverPhone = b.driverId?.phone || driver.phone || '-';
+
+            const user = state.users.find(u => u.username === b.userId) || {firstName: b.userId, lastName: ''};
+
+            Swal.fire({
+                title: 'รายละเอียดการจอง',
+                html: `
+                    <div class="text-left space-y-2 text-sm">
+                        <div class="bg-gray-50 p-3 rounded border">
+                            <p><strong>หัวข้อ:</strong> ${b.remarks}</p>
+                            <p><strong>ผู้จอง:</strong> ${user.firstName} ${user.lastName}</p>
+                            <p><strong>สถานะ:</strong> <span class="uppercase font-bold text-blue-600">${b.status}</span></p>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                             <div><strong>เริ่ม:</strong><br>${b.startDate} ${b.startTime}</div>
+                             <div><strong>ถึง:</strong><br>${b.endDate} ${b.endTime}</div>
+                        </div>
+                        <hr>
+                        <div class="flex items-center gap-2"><i data-lucide="car" class="w-4 h-4 text-gray-400"></i> ${carName} (${carPlate})</div>
+                        <div class="flex items-center gap-2"><i data-lucide="user" class="w-4 h-4 text-gray-400"></i> ${driverName} (${driverPhone})</div>
+                    </div>
+                `,
+                confirmButtonText: 'ปิด',
+                didOpen: () => lucide.createIcons()
+            });
+        }
+
         async function submitBooking(e) {
             e.preventDefault(); const fd = new FormData(e.target); const data = Object.fromEntries(fd); data.useDriver = fd.get('useDriver') === 'on';
             const res = await api.action('post', 'bookings', { ...data }); 
