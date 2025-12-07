@@ -8,7 +8,6 @@
     <!-- Libraries -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
-    <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -273,7 +272,6 @@
             main.appendChild(contentDiv);
             container.appendChild(main);
 
-            // 🔥 FIX: เรียก renderCharts หลังจาก DOM พร้อมแล้ว
             if (state.currentUser.role === 'admin' && state.viewMode === 'dashboard') {
                 requestAnimationFrame(() => {
                     setTimeout(renderCharts, 100); 
@@ -343,8 +341,9 @@
                 </div>
             `).join('');
 
-            const carsHtml = (state.cars || []).map(i => `<div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg border mb-2"><div class="flex items-center gap-3"><span class="w-3 h-3 rounded-full ${isResourceActive('car', i._id)?'bg-red-500':'bg-green-500'}"></span><div><p class="font-bold text-sm">${i.name}</p><p class="text-xs text-gray-500">${i.plate}</p></div></div><div class="flex gap-1"><button onclick="openHistoryModal('car', '${i._id}', '${i.name}')" class="text-blue-500 bg-blue-50 p-1.5 rounded"><i data-lucide="history" class="w-4 h-4"></i></button><button onclick="deleteResource('cars','${i._id}')" class="text-gray-400 p-1.5"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div></div>`).join('');
-            const driversHtml = (state.drivers || []).map(i => `<div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg border mb-2"><div class="flex items-center gap-3"><span class="w-3 h-3 rounded-full ${isResourceActive('driver', i._id)?'bg-red-500':'bg-green-500'}"></span><div><p class="font-bold text-sm">${i.name}</p><p class="text-xs text-gray-500">${i.phone}</p></div></div><div class="flex gap-1"><button onclick="openHistoryModal('driver', '${i._id}', '${i.name}')" class="text-blue-500 bg-blue-50 p-1.5 rounded"><i data-lucide="history" class="w-4 h-4"></i></button><button onclick="deleteResource('drivers','${i._id}')" class="text-gray-400 p-1.5"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div></div>`).join('');
+            // 🔥 RESTORED BUTTONS HERE
+            const carsHtml = (state.cars || []).map(i => `<div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg border mb-2"><div class="flex items-center gap-3"><span class="w-3 h-3 rounded-full ${isResourceActive('car', i._id)?'bg-red-500':'bg-green-500'}"></span><div><p class="font-bold text-sm">${i.name}</p><p class="text-xs text-gray-500">${i.plate}</p></div></div><div class="flex gap-1"><button onclick="openHistoryModal('car', '${i._id}', '${i.name}')" class="text-blue-500 bg-blue-50 p-1.5 rounded"><i data-lucide="history" class="w-4 h-4"></i></button><button onclick="openBlockModal('car','${i._id}','${i.name}')" class="text-orange-400 p-1.5 hover:bg-orange-100 rounded" title="แจ้งซ่อม"><i data-lucide="calendar-off" class="w-4 h-4"></i></button><button onclick="deleteResource('cars','${i._id}')" class="text-gray-400 p-1.5"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div></div>`).join('');
+            const driversHtml = (state.drivers || []).map(i => `<div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg border mb-2"><div class="flex items-center gap-3"><span class="w-3 h-3 rounded-full ${isResourceActive('driver', i._id)?'bg-red-500':'bg-green-500'}"></span><div><p class="font-bold text-sm">${i.name}</p><p class="text-xs text-gray-500">${i.phone}</p></div></div><div class="flex gap-1"><button onclick="openHistoryModal('driver', '${i._id}', '${i.name}')" class="text-blue-500 bg-blue-50 p-1.5 rounded"><i data-lucide="history" class="w-4 h-4"></i></button><button onclick="openBlockModal('driver','${i._id}','${i.name}')" class="text-orange-400 p-1.5 hover:bg-orange-100 rounded" title="ลา"><i data-lucide="calendar-off" class="w-4 h-4"></i></button><button onclick="deleteResource('drivers','${i._id}')" class="text-gray-400 p-1.5"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div></div>`).join('');
 
             container.innerHTML = `
                 <div class="space-y-6">
@@ -670,7 +669,21 @@
                     </div>
                 </div>`;
         } 
-        
+        function renderCharts() { 
+            if (!state.stats) return;
+            const createChart = (id, type, labels, data, colors) => {
+                const ctx = document.getElementById(id);
+                if (!ctx) return;
+                const existingChart = Chart.getChart(ctx);
+                if (existingChart) existingChart.destroy();
+                new Chart(ctx, { type: type, data: { labels: labels, datasets: [{ label: 'Data', data: data, backgroundColor: colors, borderWidth: 1 }] }, options: { responsive: true, maintainAspectRatio: false, indexAxis: type === 'bar' && id === 'driverChart' ? 'y' : 'x', plugins: { legend: { display: type === 'doughnut' } } } });
+            };
+            try {
+                createChart('carChart', 'bar', (state.stats.carStats||[]).map(x=>x.name), (state.stats.carStats||[]).map(x=>x.count), '#3b82f6');
+                createChart('driverChart', 'bar', (state.stats.driverStats||[]).map(x=>x.name), (state.stats.driverStats||[]).map(x=>x.count), '#10b981');
+                createChart('deptChart', 'doughnut', (state.stats.deptStats||[]).map(x=>x.name), (state.stats.deptStats||[]).map(x=>x.count), ['#FF6384','#36A2EB','#FFCE56','#4BC0C0']);
+            } catch (e) { console.error("Chart Error:", e); }
+        }
         function switchView(mode) { state.viewMode = mode; renderApp(); }
         function logout() { localStorage.removeItem('carBookingUser'); localStorage.removeItem('authToken'); state.currentUser = null; renderApp(); }
         function hardReset() { localStorage.clear(); location.reload(); }
@@ -788,10 +801,60 @@
                 </div>
 
                 <div id="resetPwdModal" class="modal fixed inset-0 bg-black/60 flex items-center justify-center z-50 opacity-0 pointer-events-none"><div class="bg-white p-6 rounded-xl w-80 modal-content"><h3 class="font-bold mb-4">รีเซ็ตรหัสผ่าน</h3><form onsubmit="handleResetPwd(event)" class="space-y-3"><input type="password" name="password" placeholder="รหัสใหม่" class="w-full border p-2 rounded" required><div class="flex justify-end gap-2"><button type="button" onclick="closeModal()" class="text-gray-500">ยกเลิก</button><button class="bg-orange-500 text-white px-3 py-1 rounded">ยืนยัน</button></div></form></div></div>
+                
+                <!-- 🔥 BLOCK MODAL (For Cars/Drivers Maintenance/Leave) -->
+                <div id="blockModal" class="modal fixed inset-0 bg-black/60 flex items-center justify-center z-50 opacity-0 pointer-events-none">
+                    <div class="bg-white p-6 rounded-xl w-96 modal-content">
+                        <h3 class="font-bold mb-4 text-red-600">แจ้งซ่อม / ลา</h3>
+                        <form onsubmit="handleBlockSubmit(event)" class="space-y-3">
+                            <div class="grid grid-cols-2 gap-2">
+                                <input type="date" name="startDate" class="border p-2 rounded w-full" required>
+                                <input type="time" name="startTime" class="border p-2 rounded w-full" required>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <input type="date" name="endDate" class="border p-2 rounded w-full" required>
+                                <input type="time" name="endTime" class="border p-2 rounded w-full" required>
+                            </div>
+                            <input name="remarks" placeholder="สาเหตุ" class="border p-2 rounded w-full" required>
+                            <div class="flex justify-end gap-2">
+                                <button type="button" onclick="closeModal()" class="text-gray-500">ยกเลิก</button>
+                                <button class="bg-red-600 text-white px-3 py-1 rounded">บันทึก</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
                 <div id="historyModal" class="modal fixed inset-0 bg-black/70 flex items-center justify-center z-50 opacity-0 pointer-events-none"><div class="bg-white p-6 rounded-xl w-full max-w-2xl modal-content"><div class="flex justify-between items-center mb-4"><h3 id="history-modal-title" class="font-bold text-lg">ประวัติการทำงาน</h3><button onclick="closeModal()" class="text-gray-400 hover:text-gray-600"><i data-lucide="x"></i></button></div><div id="history-modal-body"></div></div></div>
                 <div id="extendModal" class="modal fixed inset-0 bg-black/70 flex items-center justify-center z-50 opacity-0 pointer-events-none"><div class="bg-white p-6 rounded-xl w-80 modal-content"><h3 class="font-bold mb-4 text-blue-600">ขอต่อเวลาเพิ่ม</h3><form onsubmit="handleExtendSubmit(event)" class="space-y-3"><div><label class="text-xs">สิ้นสุดวันที่</label><input type="date" id="extend-date" class="w-full border p-2 rounded" required></div><div><label class="text-xs">เวลาใหม่</label><input type="time" id="extend-time" class="w-full border p-2 rounded" required></div><div class="flex justify-end gap-2 mt-4"><button type="button" onclick="closeModal()" class="text-gray-500">ยกเลิก</button><button class="bg-blue-600 text-white px-3 py-1 rounded">ยืนยัน</button></div></form></div></div>
                 <div id="changePwdModal" class="modal fixed inset-0 bg-black/70 flex items-center justify-center z-50 opacity-0 pointer-events-none"><div class="bg-white p-6 rounded-xl w-80 modal-content"><h3 class="font-bold mb-4">เปลี่ยนรหัสผ่าน</h3><form onsubmit="handleChangePwdSubmit(event)" class="space-y-3"><input type="password" name="oldPassword" placeholder="รหัสเดิม" class="w-full border p-2 rounded" required><input type="password" name="newPassword" placeholder="รหัสใหม่" class="w-full border p-2 rounded" required><button class="w-full bg-blue-600 text-white py-2 rounded">ยืนยัน</button></form></div></div>
             `;
+        }
+
+        async function openBlockModal(type, id, name) { 
+            openModal('blockModal', false, {type, id, name}); 
+        }
+        
+        async function handleBlockSubmit(e) { 
+            e.preventDefault(); 
+            const data = Object.fromEntries(new FormData(e.target)); 
+            const payload = { 
+                ...data, 
+                userId: 'ADMIN', // This userId is mostly descriptive here as backend checks admin role
+                status: 'maintenance', 
+                useDriver: false, 
+                carId: modalData.type==='car'?modalData.id:null, 
+                driverId: modalData.type==='driver'?modalData.id:null, 
+                remarks: `[ปิดงาน] ${data.remarks}` 
+            }; 
+            
+            const res = await api.action('post', 'bookings', payload); 
+            if (res.success) {
+                Swal.fire('Success', 'บันทึกเรียบร้อย', 'success');
+                closeModal(); 
+                api.fetchData(); 
+            } else {
+                Swal.fire('Error', res.message, 'error');
+            }
         }
 
         function confirmReject() { const r=document.getElementById('rejectReason').value; if(!r)return Swal.fire('ระบุเหตุผล'); api.action('put',`bookings/${modalData.id}`,{status:'rejected',rejectionReason:r}).then(()=>{closeModal();api.fetchData();}); }
