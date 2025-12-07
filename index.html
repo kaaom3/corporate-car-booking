@@ -45,50 +45,14 @@
         dayjs.locale('th');
 
         // --- CONFIG ---
+        // 👇 ใส่ลิงก์ ngrok ของคุณที่นี่ (อย่าลืม /api)
         const API_URL = 'https://obtrusive-interlinearly-everette.ngrok-free.dev/api'; 
+        
         const LINE_BOT_ID = '@342rmqlv'; 
 
-        // 🏢 DEPARTMENTS LIST
-        const DEPARTMENTS = [
-            "Admissions",
-            "Executive Office",
-            "Engineer",
-            "Food & Beverage",
-            "Finance",
-            "Housekeeping",
-            "HR & TQM",
-            "Information & Technology",
-            "Operations",
-            "Retails",
-            "Sales"
-        ];
-
-        // 🔥 AXIOS INTERCEPTOR
+        // 🔥 FIX: แก้ปัญหา ngrok ไม่ส่งข้อมูล (Skip Warning Page)
         axios.defaults.headers.common['ngrok-skip-browser-warning'] = 'true';
-        axios.interceptors.request.use(config => {
-            const token = localStorage.getItem('authToken');
-            if (token) {
-                config.headers['Authorization'] = `Bearer ${token}`;
-            }
-            return config;
-        }, error => Promise.reject(error));
-
-        axios.interceptors.response.use(response => response, error => {
-            if (error.response && (error.response.status === 401 || error.response.status === 403)) {
-                if (!error.config.url.includes('/login')) {
-                    Swal.fire({
-                        icon: 'warning',
-                        title: 'Session หมดอายุ',
-                        text: 'กรุณาเข้าสู่ระบบใหม่',
-                        timer: 2000,
-                        showConfirmButton: false
-                    }).then(() => {
-                        logout();
-                    });
-                }
-            }
-            return Promise.reject(error);
-        });
+        axios.defaults.headers.common['User-Agent'] = 'CarBookingApp'; // หลอกว่าเป็นแอป
 
         // --- STATE ---
         const state = {
@@ -98,22 +62,16 @@
             cars: [],
             drivers: [],
             users: [],
-            colleagues: [],
             stats: { carStats: [], deptStats: [], driverStats: [] },
             currentDate: new Date(),
             loading: false
         };
 
+        // Load User Session
         try {
-            const savedUser = localStorage.getItem('carBookingUser');
-            const savedToken = localStorage.getItem('authToken');
-            if (savedUser && savedToken) {
-                state.currentUser = JSON.parse(savedUser);
-            } else {
-                localStorage.removeItem('carBookingUser');
-                localStorage.removeItem('authToken');
-            }
-        } catch (e) { localStorage.clear(); }
+            const saved = localStorage.getItem('carBookingUser');
+            if (saved) state.currentUser = JSON.parse(saved);
+        } catch (e) { localStorage.removeItem('carBookingUser'); }
 
         // --- API CLIENT ---
         const api = {
@@ -141,6 +99,14 @@
                     renderApp(); 
                 } catch (error) { 
                     console.error("Fetch Error:", error);
+                    if(!document.getElementById('connection-error')) {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'เชื่อมต่อ Server ไม่ได้',
+                            text: 'กรุณาตรวจสอบลิงก์ ngrok หรือ Server',
+                            toast: true, position: 'top-end', showConfirmButton: false, timer: 5000
+                        });
+                    }
                     renderApp(); 
                 }
             },
@@ -193,16 +159,12 @@
                 const data = Object.fromEntries(new FormData(e.target));
                 try {
                     const res = await api.login(data);
-                    
-                    const { token, user } = res.data;
+                    const user = res.data;
                     const userData = {
                         name: user.firstName ? `${user.firstName} ${user.lastName}` : user.username,
-                        username: user.username, role: user.role, id: user._id, mustChangePassword: user.mustChangePassword, department: user.department
+                        username: user.username, role: user.role, id: user._id, mustChangePassword: user.mustChangePassword
                     };
-                    
-                    localStorage.setItem('authToken', token);
                     localStorage.setItem('carBookingUser', JSON.stringify(userData));
-                    
                     state.currentUser = userData;
                     state.viewMode = 'dashboard';
                     Swal.fire({ icon: 'success', title: `ยินดีต้อนรับ ${userData.name}`, timer: 1000, showConfirmButton: false });
@@ -225,8 +187,13 @@
                     <div class="flex items-center gap-2 bg-gray-100 rounded-full pl-3 pr-1 py-1 border">
                         <i data-lucide="user" class="w-4 h-4 text-gray-500"></i>
                         <span class="text-sm font-medium text-gray-700 mr-2">${state.currentUser.name}</span>
-                        <button onclick="logout()" class="text-red-500 hover:bg-red-50 p-2 rounded-full transition" title="ออกจากระบบ"><i data-lucide="log-out" class="w-5 h-5"></i></button>
+                        
+                        <button onclick="openModal('changePwdModal')" class="bg-white text-gray-500 hover:text-blue-600 hover:bg-blue-50 p-1.5 rounded-full transition shadow-sm" title="เปลี่ยนรหัสผ่าน">
+                            <i data-lucide="key" class="w-4 h-4"></i>
+                        </button>
                     </div>
+
+                    <button onclick="logout()" class="text-red-500 hover:bg-red-50 p-2 rounded-full transition" title="ออกจากระบบ"><i data-lucide="log-out" class="w-5 h-5"></i></button>
                 </div>`;
             container.appendChild(nav);
         }
@@ -273,9 +240,7 @@
             container.appendChild(main);
 
             if (state.currentUser.role === 'admin' && state.viewMode === 'dashboard') {
-                requestAnimationFrame(() => {
-                    setTimeout(renderCharts, 100); 
-                });
+                setTimeout(renderCharts, 300);
             }
         }
 
@@ -286,22 +251,24 @@
         function getDriverOptions(selectedId) {
             return (state.drivers || []).map(d => `<option value="${d._id}" ${selectedId===d._id?'selected':''}>${d.name}</option>`).join('');
         }
-        function getDeptOptions(selected) {
-            return DEPARTMENTS.map(d => `<option value="${d}" ${selected === d ? 'selected' : ''}>${d}</option>`).join('');
-        }
 
         function isResourceActive(type, id) {
             const now = dayjs();
-            return state.bookings.some(b => {
+            const active = state.bookings.some(b => {
                 if (['approved', 'active'].includes(b.status)) {
                     const start = dayjs(`${b.startDate}T${b.startTime}`);
                     const end = dayjs(`${b.endDate}T${b.endTime}`);
                     const isActiveNow = now.isAfter(start) && now.isBefore(end);
-                    if (type === 'car' && b.carId) return (b.carId._id === id || b.carId === id) && isActiveNow;
-                    if (type === 'driver' && b.driverId) return (b.driverId._id === id || b.driverId === id) && isActiveNow;
+                    if (type === 'car' && b.carId) {
+                        return (b.carId._id === id || b.carId === id) && isActiveNow;
+                    }
+                    if (type === 'driver' && b.driverId) {
+                        return (b.driverId._id === id || b.driverId === id) && isActiveNow;
+                    }
                 }
                 return false;
             });
+            return active;
         }
 
         function renderAdminDashboard(container) {
@@ -315,7 +282,9 @@
             const carsInUseCount = new Set(todayBookings.filter(b=>b.carId).map(b => b.carId._id || b.carId)).size;
             const driversInUseCount = new Set(todayBookings.filter(b=>b.driverId).map(b => b.driverId._id || b.driverId)).size;
 
-            const pending = state.bookings.filter(b => b.status === 'pending');
+            const bookingsList = state.bookings || [];
+            const pending = bookingsList.filter(b => b.status === 'pending');
+            
             const pendingHtml = pending.length === 0 ? 
                 '<div class="text-center text-gray-400 py-8 bg-gray-50 rounded-lg border border-dashed">ไม่มีรายการรออนุมัติ</div>' : 
                 pending.map(b => `
@@ -323,10 +292,7 @@
                     <div>
                         <h4 class="font-bold text-gray-800">${b.remarks || '-'}</h4>
                         <p class="text-sm text-gray-500 mt-1">📅 ${b.startDate} ${b.startTime} - ${b.endDate} ${b.endTime}</p>
-                        <div class="mt-2 text-xs text-gray-500 space-x-1">
-                            <span class="bg-gray-100 px-2 py-1 rounded">ผู้จอง: ${b.bookedBy || b.userId}</span>
-                            ${b.bookedBy && b.bookedBy !== b.userId ? `<span class="bg-orange-100 text-orange-700 px-2 py-1 rounded">จองให้: ${b.userId}</span>` : ''}
-                        </div>
+                        <div class="mt-2"><span class="text-xs bg-gray-100 px-2 py-1 rounded">User: ${b.userId}</span></div>
                     </div>
                     <div class="flex flex-col gap-2 w-full md:w-auto text-right">
                         <div class="flex gap-2">
@@ -341,9 +307,37 @@
                 </div>
             `).join('');
 
-            // 🔥 RESTORED BUTTONS HERE
-            const carsHtml = (state.cars || []).map(i => `<div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg border mb-2"><div class="flex items-center gap-3"><span class="w-3 h-3 rounded-full ${isResourceActive('car', i._id)?'bg-red-500':'bg-green-500'}"></span><div><p class="font-bold text-sm">${i.name}</p><p class="text-xs text-gray-500">${i.plate}</p></div></div><div class="flex gap-1"><button onclick="openHistoryModal('car', '${i._id}', '${i.name}')" class="text-blue-500 bg-blue-50 p-1.5 rounded"><i data-lucide="history" class="w-4 h-4"></i></button><button onclick="openBlockModal('car','${i._id}','${i.name}')" class="text-orange-400 p-1.5 hover:bg-orange-100 rounded" title="แจ้งซ่อม"><i data-lucide="calendar-off" class="w-4 h-4"></i></button><button onclick="deleteResource('cars','${i._id}')" class="text-gray-400 p-1.5"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div></div>`).join('');
-            const driversHtml = (state.drivers || []).map(i => `<div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg border mb-2"><div class="flex items-center gap-3"><span class="w-3 h-3 rounded-full ${isResourceActive('driver', i._id)?'bg-red-500':'bg-green-500'}"></span><div><p class="font-bold text-sm">${i.name}</p><p class="text-xs text-gray-500">${i.phone}</p></div></div><div class="flex gap-1"><button onclick="openHistoryModal('driver', '${i._id}', '${i.name}')" class="text-blue-500 bg-blue-50 p-1.5 rounded"><i data-lucide="history" class="w-4 h-4"></i></button><button onclick="openBlockModal('driver','${i._id}','${i.name}')" class="text-orange-400 p-1.5 hover:bg-orange-100 rounded" title="ลา"><i data-lucide="calendar-off" class="w-4 h-4"></i></button><button onclick="deleteResource('drivers','${i._id}')" class="text-gray-400 p-1.5"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div></div>`).join('');
+            const carsHtml = (state.cars || []).map(i => {
+                const isActive = isResourceActive('car', i._id);
+                return `
+                <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg border mb-2">
+                    <div class="flex items-center gap-3">
+                        <span class="w-3 h-3 rounded-full ${isActive ? 'bg-red-500' : 'bg-green-500'}" title="${isActive ? 'กำลังใช้งาน' : 'ว่าง'}"></span>
+                        <div><p class="font-bold text-sm">${i.name}</p><p class="text-xs text-gray-500">${i.plate}</p></div>
+                    </div>
+                    <div class="flex gap-1">
+                        <button onclick="openHistoryModal('car', '${i._id}', '${i.name}')" class="text-blue-500 bg-blue-50 p-1.5 rounded hover:bg-blue-100" title="ดูประวัติการใช้"><i data-lucide="history" class="w-4 h-4"></i></button>
+                        <button onclick="openBlockModal('car','${i._id}','${i.name}')" class="text-orange-400 p-1.5 hover:bg-orange-100 rounded" title="แจ้งซ่อม"><i data-lucide="calendar-off" class="w-4 h-4"></i></button>
+                        <button onclick="deleteResource('cars','${i._id}')" class="text-gray-400 hover:text-red-500 p-1.5"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                    </div>
+                </div>`;
+            }).join('');
+
+            const driversHtml = (state.drivers || []).map(i => {
+                const isActive = isResourceActive('driver', i._id);
+                return `
+                <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg border mb-2">
+                    <div class="flex items-center gap-3">
+                        <span class="w-3 h-3 rounded-full ${isActive ? 'bg-red-500' : 'bg-green-500'}" title="${isActive ? 'กำลังทำงาน' : 'ว่าง'}"></span>
+                        <div><p class="font-bold text-sm">${i.name}</p><p class="text-xs text-gray-500">${i.phone}</p></div>
+                    </div>
+                    <div class="flex gap-1">
+                        <button onclick="openHistoryModal('driver', '${i._id}', '${i.name}')" class="text-blue-500 bg-blue-50 p-1.5 rounded hover:bg-blue-100" title="ดูประวัติงาน"><i data-lucide="history" class="w-4 h-4"></i></button>
+                        <button onclick="openBlockModal('driver','${i._id}','${i.name}')" class="text-orange-400 p-1.5 hover:bg-orange-100 rounded" title="ลา"><i data-lucide="calendar-off" class="w-4 h-4"></i></button>
+                        <button onclick="deleteResource('drivers','${i._id}')" class="text-gray-400 hover:text-red-500 p-1.5"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                    </div>
+                </div>`;
+            }).join('');
 
             container.innerHTML = `
                 <div class="space-y-6">
@@ -351,16 +345,31 @@
                         <div class="absolute right-0 top-0 opacity-10 p-4"><i data-lucide="activity" class="w-48 h-48"></i></div>
                         <div class="flex items-center gap-4 relative z-10">
                             <div class="bg-white/20 p-3 rounded-full"><i data-lucide="calendar-check" class="w-8 h-8"></i></div>
-                            <div><h3 class="font-bold text-lg">สรุปงานวันนี้</h3><p class="text-blue-100 text-sm">ภาพรวมการใช้งาน</p></div>
+                            <div>
+                                <h3 class="font-bold text-lg">สรุปงานวันนี้ (${today.format('DD/MM/YYYY')})</h3>
+                                <p class="text-blue-100 text-sm">ภาพรวมการใช้งานทรัพยากร</p>
+                            </div>
                         </div>
                         <div class="flex gap-8 text-center relative z-10">
-                            <div><div class="text-3xl font-bold">${todayBookings.length}</div><div class="text-xs text-blue-200 uppercase">งานทั้งหมด</div></div>
+                            <div>
+                                <div class="text-3xl font-bold">${todayBookings.length}</div>
+                                <div class="text-xs text-blue-200 uppercase">งานทั้งหมด</div>
+                            </div>
                             <div class="w-px bg-white/20"></div>
-                            <div><div class="text-3xl font-bold text-green-300">${carsInUseCount}</div><div class="text-xs text-blue-200 uppercase">รถที่ใช้</div></div>
+                            <div>
+                                <div class="text-3xl font-bold text-green-300">${carsInUseCount}</div>
+                                <div class="text-xs text-blue-200 uppercase">รถที่ใช้</div>
+                            </div>
                             <div class="w-px bg-white/20"></div>
-                            <div><div class="text-3xl font-bold text-yellow-300">${driversInUseCount}</div><div class="text-xs text-blue-200 uppercase">คนขับที่ทำงาน</div></div>
+                            <div>
+                                <div class="text-3xl font-bold text-yellow-300">${driversInUseCount}</div>
+                                <div class="text-xs text-blue-200 uppercase">คนขับที่ทำงาน</div>
+                            </div>
                         </div>
-                        <button onclick="exportToCSV()" class="absolute top-4 right-4 bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-1.5 rounded flex items-center gap-2 border border-white/20 transition z-10"><i data-lucide="download" class="w-4 h-4"></i> CSV</button>
+                        <!-- NEW: Export Button -->
+                        <button onclick="exportToCSV()" class="absolute top-4 right-4 bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-1.5 rounded flex items-center gap-2 border border-white/20 transition z-10">
+                            <i data-lucide="download" class="w-4 h-4"></i> Export CSV
+                        </button>
                     </div>
 
                     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -378,99 +387,65 @@
                         <div class="bg-white p-6 rounded-xl shadow-sm border"><h3 class="font-bold mb-4">จัดการรถ</h3><form onsubmit="addResource(event, 'cars')" class="flex gap-2 mb-4"><input name="name" placeholder="ชื่อ" class="border p-2 rounded text-sm flex-1" required><input name="plate" placeholder="ทะเบียน" class="border p-2 rounded text-sm w-28" required><button class="bg-blue-600 text-white p-2 rounded"><i data-lucide="plus" class="w-4 h-4"></i></button></form><div class="space-y-2 max-h-60 overflow-y-auto custom-scrollbar">${carsHtml}</div></div>
                         <div class="bg-white p-6 rounded-xl shadow-sm border"><h3 class="font-bold mb-4">จัดการคนขับ</h3><form onsubmit="addResource(event, 'drivers')" class="flex gap-2 mb-4"><input name="name" placeholder="ชื่อ" class="border p-2 rounded text-sm flex-1" required><input name="phone" placeholder="เบอร์" class="border p-2 rounded text-sm w-28" required><button class="bg-green-600 text-white p-2 rounded"><i data-lucide="plus" class="w-4 h-4"></i></button></form><div class="space-y-2 max-h-60 overflow-y-auto custom-scrollbar">${driversHtml}</div></div>
                     </div>
-                </div>`;
+                </div>
+            `;
         }
 
-        async function renderUserDashboard(container) {
-            // Fetch colleagues first
-            if(state.colleagues.length === 0) {
-                const res = await api.action('get', 'colleagues');
-                if(res.success) state.colleagues = res.data;
+        // --- NEW: Export CSV Function ---
+        function exportToCSV() {
+            const bookings = state.bookings;
+            if (bookings.length === 0) {
+                Swal.fire('ไม่มีข้อมูล', 'ยังไม่มีรายการจองในระบบ', 'info');
+                return;
             }
 
-            const myBookings = state.bookings.filter(b => b.userId === state.currentUser.username || b.bookedBy === state.currentUser.username);
-            
-            const listHtml = myBookings.map(b => {
-                let startBtn = '';
-                const showExtend = ['approved', 'active'].includes(b.status);
-                if(b.status === 'approved') startBtn = `<button onclick="startTrip('${b._id}', '${b.startDate}', '${b.startTime}')" class="bg-green-600 text-white px-3 py-1 rounded text-xs hover:bg-green-700 shadow-sm transition">เริ่มงาน</button>`;
+            // CSV Header
+            let csvContent = "\uFEFF"; // BOM for Thai support
+            csvContent += "Date,Time,User,Car,Driver,Status,StartOdo,EndOdo,FuelCost,TollCost\n";
 
-                const isForOthers = b.userId !== state.currentUser.username;
+            bookings.forEach(b => {
+                const user = state.users.find(u => u.username === b.userId);
+                const car = state.cars.find(c => c._id === b.carId);
+                const driver = state.drivers.find(d => d._id === b.driverId);
+                
+                const row = [
+                    `${b.startDate}`,
+                    `${b.startTime}-${b.endTime}`,
+                    `"${user ? user.firstName + ' ' + user.lastName : b.userId}"`,
+                    `"${car ? car.name : '-'}"`,
+                    `"${driver ? driver.name : '-'}"`,
+                    `"${b.status}"`,
+                    b.startOdometer || 0,
+                    b.endOdometer || 0,
+                    b.fuelCost || 0,
+                    b.tollCost || 0
+                ].join(",");
+                csvContent += row + "\n";
+            });
 
-                return `
-                <div class="border p-4 rounded-xl bg-white flex justify-between items-start shadow-sm mb-2 relative overflow-hidden">
-                    ${isForOthers ? '<div class="absolute top-0 right-0 bg-orange-100 text-orange-600 text-[10px] px-2 py-0.5 rounded-bl">จองให้ผู้อื่น</div>' : ''}
-                    <div>
-                        <div class="mb-2"><span class="px-2 py-1 rounded text-xs font-bold bg-gray-100 uppercase">${b.status}</span></div>
-                        <p class="font-bold text-gray-800">${b.remarks}</p>
-                        <p class="text-xs text-gray-500 mt-1">${b.startDate} ${b.startTime} - ${b.endDate} ${b.endTime}</p>
-                        ${isForOthers ? `<p class="text-xs text-gray-500 mt-1">ผู้ใช้งาน: <strong>${b.userId}</strong></p>` : ''}
-                        ${b.startOdometer ? `<div class="mt-2 text-xs bg-gray-50 p-2 rounded border">ไมล์: ${b.startOdometer} ${b.endOdometer?`-> ${b.endOdometer}`:''}</div>` : ''}
-                    </div>
-                    <div class="flex flex-col gap-2 text-right mt-4">
-                        ${startBtn}
-                        ${b.status === 'active' ? `<button onclick="endTrip('${b._id}', ${b.startOdometer})" class="bg-gray-800 text-white px-3 py-1 rounded text-xs">คืนรถ</button>` : ''}
-                        ${showExtend ? `<button onclick="openExtendModal('${b._id}', '${b.endDate}', '${b.endTime}')" class="text-blue-600 text-xs border border-blue-200 px-2 py-1 rounded hover:bg-blue-50">ขอต่อเวลา</button>` : ''}
-                        ${['pending','approved'].includes(b.status) ? `<button onclick="cancelBooking('${b._id}')" class="text-red-500 text-xs underline">ยกเลิก</button>` : ''}
-                    </div>
-                </div>`;
-            }).join('');
-
-            const today = new Date().toISOString().split('T')[0];
-            const colleaguesOptions = state.colleagues.map(u => `<option value="${u.username}">${u.firstName} ${u.lastName} (${u.username})</option>`).join('');
-
-            container.innerHTML = `
-                <div class="grid md:grid-cols-12 gap-8">
-                    <div class="md:col-span-4 bg-white p-6 rounded-2xl shadow-sm border h-fit sticky top-24">
-                        <h2 class="text-lg font-bold mb-6 flex items-center gap-2 text-gray-800"><i data-lucide="plus" class="bg-blue-100 text-blue-600 rounded p-1"></i> จองรถใหม่</h2>
-                        <form id="bookingForm" onsubmit="submitBooking(event)" class="space-y-4">
-                            <div class="grid grid-cols-2 gap-2">
-                                <div><label class="text-xs">เริ่ม</label><input type="date" name="startDate" id="startDate" min="${today}" class="w-full border p-2 rounded text-sm" required onchange="checkBookingAvailability()"></div>
-                                <div><label class="text-xs">เวลา</label><input type="time" name="startTime" id="startTime" class="w-full border p-2 rounded text-sm" required onchange="checkBookingAvailability()"></div>
-                            </div>
-                            <div class="grid grid-cols-2 gap-2">
-                                <div><label class="text-xs">คืน</label><input type="date" name="endDate" id="endDate" min="${today}" class="w-full border p-2 rounded text-sm" required onchange="checkBookingAvailability()"></div>
-                                <div><label class="text-xs">เวลา</label><input type="time" name="endTime" id="endTime" class="w-full border p-2 rounded text-sm" required onchange="checkBookingAvailability()"></div>
-                            </div>
-                            
-                            <!-- 🔥 NEW: Book for others -->
-                            <div class="bg-gray-50 p-3 rounded border">
-                                <div class="flex items-center gap-2 mb-2">
-                                    <input type="checkbox" id="bookForOthers" onchange="toggleBookFor(this)" class="rounded text-blue-600">
-                                    <label for="bookForOthers" class="text-sm font-medium">จองให้ผู้อื่น (ในแผนก)</label>
-                                </div>
-                                <select name="userId" id="targetUserSelect" class="w-full border p-2 rounded text-sm hidden" disabled>
-                                    <option value="${state.currentUser.username}">-- เลือกชื่อเพื่อนร่วมงาน --</option>
-                                    ${colleaguesOptions}
-                                </select>
-                            </div>
-
-                            <div class="flex items-center gap-2"><input type="checkbox" name="useDriver"> <label class="text-sm">ต้องการคนขับ</label></div>
-                            <textarea name="remarks" class="w-full border p-2 rounded text-sm" rows="3" placeholder="รายละเอียด" required></textarea>
-                            <div id="availability-result" class="text-xs p-2 rounded bg-gray-50 border hidden"></div>
-                            <button id="submitBtn" class="w-full bg-blue-600 text-white p-3 rounded-xl font-bold">ยืนยัน</button>
-                        </form>
-                    </div>
-                    <div class="md:col-span-8">
-                        <div class="bg-white p-6 rounded-2xl shadow-sm border">
-                            <h3 class="font-bold mb-4"><i data-lucide="list"></i> ประวัติการจอง</h3>
-                            ${listHtml || '<p class="text-gray-400 text-center">ยังไม่มีรายการ</p>'}
-                        </div>
-                    </div>
-                </div>`;
+            const encodedUri = encodeURI("data:text/csv;charset=utf-8," + csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `booking_report_${dayjs().format('YYYY-MM-DD')}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
         }
 
-        // --- NEW: Toggle Logic ---
-        function toggleBookFor(checkbox) {
-            const select = document.getElementById('targetUserSelect');
-            if (checkbox.checked) {
-                select.classList.remove('hidden');
-                select.disabled = false;
-            } else {
-                select.classList.add('hidden');
-                select.disabled = true;
-                select.value = state.currentUser.username;
-            }
+        function renderCharts() {
+            if (!state.stats) return;
+            const createChart = (id, type, labels, data, colors) => {
+                const ctx = document.getElementById(id);
+                if (!ctx) return;
+                const existingChart = Chart.getChart(ctx);
+                if (existingChart) existingChart.destroy();
+                new Chart(ctx, { type: type, data: { labels: labels, datasets: [{ label: 'Data', data: data, backgroundColor: colors, borderWidth: 1 }] }, options: { responsive: true, maintainAspectRatio: false, indexAxis: type === 'bar' && id === 'driverChart' ? 'y' : 'x', plugins: { legend: { display: type === 'doughnut' } } } });
+            };
+            try {
+                createChart('carChart', 'bar', (state.stats.carStats||[]).map(x=>x.name), (state.stats.carStats||[]).map(x=>x.count), '#3b82f6');
+                createChart('driverChart', 'bar', (state.stats.driverStats||[]).map(x=>x.name), (state.stats.driverStats||[]).map(x=>x.count), '#10b981');
+                createChart('deptChart', 'doughnut', (state.stats.deptStats||[]).map(x=>x.name), (state.stats.deptStats||[]).map(x=>x.count), ['#FF6384','#36A2EB','#FFCE56','#4BC0C0']);
+            } catch (e) { console.error("Chart Error:", e); }
         }
 
         function renderUserManagement(container) {
@@ -500,11 +475,7 @@
                         <input name="firstName" placeholder="ชื่อ" class="border p-2 rounded text-sm" required>
                         <input name="lastName" placeholder="นามสกุล" class="border p-2 rounded text-sm" required>
                         <input name="email" placeholder="อีเมล" class="border p-2 rounded text-sm" required>
-                        <!-- 🔥 NEW: Department Dropdown -->
-                        <select name="department" class="border p-2 rounded text-sm" required>
-                            <option value="">-- เลือกแผนก --</option>
-                            ${getDeptOptions()}
-                        </select>
+                        <input name="department" placeholder="แผนก" class="border p-2 rounded text-sm" required>
                         <button class="bg-green-600 text-white px-4 rounded text-sm font-bold md:col-span-6 mt-2">เพิ่มพนักงาน</button>
                     </form>
                     <div class="overflow-x-auto">
@@ -516,89 +487,130 @@
                 </div>`;
         }
 
-        // --- CHART RENDERING (FIXED) ---
-        function renderCharts() {
-            if (!state.stats) return;
-            
-            // Check if library is loaded
-            if (typeof Chart === 'undefined') {
-                console.error("Chart.js not loaded!");
-                return;
-            }
+        function renderUserDashboard(container) {
+            const myBookings = state.bookings.filter(b => b.userId === state.currentUser.username);
+            const now = dayjs(); 
 
-            const createChart = (id, type, labels, data, colors, label) => {
-                const ctx = document.getElementById(id);
-                if (!ctx) return;
-                
-                // Destroy existing
-                const existingChart = Chart.getChart(ctx);
-                if (existingChart) existingChart.destroy();
+            const listHtml = myBookings.map(b => {
+                let startBtn = '';
+                // Logic to show "Extension" button if approved/active
+                const showExtend = ['approved', 'active'].includes(b.status);
 
-                if (data.length === 0) {
-                    // Optional: could render a placeholder here
+                if(b.status === 'approved') {
+                    const bookingStart = dayjs(`${b.startDate} ${b.startTime}`);
+                    if (now.isBefore(bookingStart)) {
+                        startBtn = `<button disabled class="bg-gray-300 text-gray-500 px-3 py-1 rounded text-xs cursor-not-allowed border" title="เริ่มได้เมื่อถึงเวลา ${b.startTime}">รอเวลา ${b.startTime}</button>`;
+                    } else {
+                        startBtn = `<button onclick="startTrip('${b._id}', '${b.startDate}', '${b.startTime}')" class="bg-green-600 text-white px-3 py-1 rounded text-xs hover:bg-green-700 shadow-sm transition">เริ่มงาน</button>`;
+                    }
                 }
 
-                new Chart(ctx, {
-                    type: type,
-                    data: {
-                        labels: labels,
-                        datasets: [{
-                            label: label || 'จำนวนครั้ง',
-                            data: data,
-                            backgroundColor: colors,
-                            borderWidth: 1
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        indexAxis: type === 'bar' && id === 'driverChart' ? 'y' : 'x',
-                        plugins: {
-                            legend: { display: type === 'doughnut' }
-                        },
-                        scales: type !== 'doughnut' ? {
-                            y: { beginAtZero: true, ticks: { precision: 0 } }
-                        } : {}
-                    }
-                });
-            };
+                let odometerHtml = '';
+                if(b.startOdometer) {
+                    odometerHtml = `
+                    <div class="mt-2 text-xs bg-gray-50 p-2 rounded border space-y-1">
+                        <div class="flex justify-between items-center"><span class="text-gray-500">ไมล์เริ่มต้น:</span> <span class="font-bold">${b.startOdometer}</span></div>
+                        ${b.endOdometer ? `
+                            <div class="flex justify-between items-center"><span class="text-gray-500">ไมล์สิ้นสุด:</span> <span class="font-bold">${b.endOdometer}</span></div>
+                            <div class="flex justify-between items-center text-green-600 pt-1 border-t"><span class="font-bold">ระยะทางรวม:</span> <span class="font-bold">${b.endOdometer - b.startOdometer} กม.</span></div>
+                            <div class="flex justify-between items-center text-gray-500 pt-1 border-t mt-1"><span>ค่าน้ำมัน: ${b.fuelCost}</span> <span>ทางด่วน: ${b.tollCost}</span></div>
+                        ` : '<div class="text-orange-500 text-[10px]">* กำลังเดินทาง</div>'}
+                    </div>`;
+                }
 
-            try {
-                createChart('carChart', 'bar', 
-                    (state.stats.carStats||[]).map(x=>x.name), 
-                    (state.stats.carStats||[]).map(x=>x.count), 
-                    '#3b82f6', 'การใช้งานรถ');
-                    
-                createChart('driverChart', 'bar', 
-                    (state.stats.driverStats||[]).map(x=>x.name), 
-                    (state.stats.driverStats||[]).map(x=>x.count), 
-                    '#10b981', 'งานขับรถ');
-                    
-                // 🔥 Enhanced Colors for Dept
-                createChart('deptChart', 'doughnut', 
-                    (state.stats.deptStats||[]).map(x=>x.name), 
-                    (state.stats.deptStats||[]).map(x=>x.count), 
-                    ['#FF6384','#36A2EB','#FFCE56','#4BC0C0','#9966FF','#FF9F40']);
-            } catch (e) { console.error("Chart Render Error:", e); }
+                return `
+                <div class="border p-4 rounded-xl bg-white flex justify-between items-start shadow-sm mb-2">
+                    <div>
+                        <div class="mb-2"><span class="px-2 py-1 rounded text-xs font-bold bg-gray-100">${b.status.toUpperCase()}</span></div>
+                        <p class="font-bold text-gray-800">${b.remarks}</p>
+                        <p class="text-xs text-gray-500 mt-1">${b.startDate} ${b.startTime} - ${b.endDate} ${b.endTime}</p>
+                        ${odometerHtml}
+                    </div>
+                    <div class="flex flex-col gap-2 text-right">
+                        ${startBtn}
+                        ${b.status === 'active' ? `<button onclick="endTrip('${b._id}', ${b.startOdometer})" class="bg-gray-800 text-white px-3 py-1 rounded text-xs">คืนรถ</button>` : ''}
+                        ${showExtend ? `<button onclick="openExtendModal('${b._id}', '${b.endDate}', '${b.endTime}')" class="text-blue-600 text-xs border border-blue-200 px-2 py-1 rounded hover:bg-blue-50">ขอต่อเวลา</button>` : ''}
+                        ${['pending','approved'].includes(b.status) ? `<button onclick="cancelBooking('${b._id}')" class="text-red-500 text-xs underline">ยกเลิก</button>` : ''}
+                    </div>
+                </div>`;
+            }).join('');
+
+            const today = new Date().toISOString().split('T')[0];
+
+            container.innerHTML = `
+                <div class="grid md:grid-cols-12 gap-8">
+                    <div class="md:col-span-4 bg-white p-6 rounded-2xl shadow-sm border h-fit sticky top-24">
+                        <h2 class="text-lg font-bold mb-6 flex items-center gap-2 text-gray-800"><i data-lucide="plus" class="bg-blue-100 text-blue-600 rounded p-1"></i> จองรถใหม่</h2>
+                        <form id="bookingForm" onsubmit="submitBooking(event)" class="space-y-4">
+                            <div class="grid grid-cols-2 gap-2">
+                                <div><label class="text-xs">เริ่ม</label><input type="date" name="startDate" id="startDate" min="${today}" class="w-full border p-2 rounded text-sm" required onchange="checkBookingAvailability()"></div>
+                                <div><label class="text-xs">เวลา</label><input type="time" name="startTime" id="startTime" class="w-full border p-2 rounded text-sm" required onchange="checkBookingAvailability()"></div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div><label class="text-xs">คืน</label><input type="date" name="endDate" id="endDate" min="${today}" class="w-full border p-2 rounded text-sm" required onchange="checkBookingAvailability()"></div>
+                                <div><label class="text-xs">เวลา</label><input type="time" name="endTime" id="endTime" class="w-full border p-2 rounded text-sm" required onchange="checkBookingAvailability()"></div>
+                            </div>
+                             <div class="flex items-center gap-2"><input type="checkbox" name="useDriver"> <label class="text-sm">ต้องการคนขับ</label></div>
+                            <textarea name="remarks" class="w-full border p-2 rounded text-sm" rows="3" placeholder="รายละเอียด" required></textarea>
+                            <div id="availability-result" class="text-xs p-2 rounded bg-gray-50 border hidden"></div>
+                            <button id="submitBtn" class="w-full bg-blue-600 text-white p-3 rounded-xl font-bold">ยืนยัน</button>
+                        </form>
+                    </div>
+                    <div class="md:col-span-8">
+                        <div class="bg-white p-6 rounded-2xl shadow-sm border">
+                            <h3 class="font-bold mb-4"><i data-lucide="list"></i> ประวัติการจอง</h3>
+                            ${listHtml || '<p class="text-gray-400 text-center">ยังไม่มีรายการ</p>'}
+                        </div>
+                    </div>
+                </div>`;
         }
 
-        // --- Other Logic ---
-        async function checkBookingAvailability() { /* Same as before */ 
+        async function checkBookingAvailability() {
             const startD = document.getElementById('startDate').value;
             const startT = document.getElementById('startTime').value;
             const endD = document.getElementById('endDate').value;
             const endT = document.getElementById('endTime').value;
             const resDiv = document.getElementById('availability-result');
+            const btn = document.getElementById('submitBtn');
+
             if(startD && startT && endD && endT) {
+                if(startD > endD || (startD === endD && startT >= endT)) {
+                    resDiv.innerHTML = '<span class="text-red-500">❌ เวลาคืนรถต้องหลังเวลารับรถ</span>';
+                    resDiv.classList.remove('hidden');
+                    return;
+                }
+
                 try {
-                    const res = await axios.post(`${API_URL}/check-availability`, { startDate: startD, startTime: startT, endDate: endD, endTime: endT });
-                    let html = `<div class="font-bold mb-1 text-gray-700">สถานะ:</div>`;
-                    if(res.data.availableCars.length > 0) html += `<div class="text-green-600">✅ รถว่าง ${res.data.availableCars.length} คัน</div>`; else html += `<div class="text-red-500">❌ รถเต็ม</div>`;
-                    resDiv.innerHTML = html; resDiv.classList.remove('hidden');
-                } catch (e) {}
+                    const res = await axios.post(`${API_URL}/check-availability`, {
+                        startDate: startD, startTime: startT, endDate: endD, endTime: endT
+                    });
+                    
+                    const cars = res.data.availableCars;
+                    const drivers = res.data.availableDrivers;
+                    
+                    let html = `<div class="font-bold mb-1 text-gray-700">สถานะช่วงเวลาที่เลือก:</div>`;
+                    if(cars.length > 0) {
+                        html += `<div class="text-green-600">✅ รถว่าง ${cars.length} คัน (${cars.map(c=>c.name).join(', ')})</div>`;
+                    } else {
+                        html += `<div class="text-red-500">❌ รถเต็มทุกคัน</div>`;
+                    }
+
+                    if(drivers.length > 0) {
+                        html += `<div class="text-green-600">✅ คนขับว่าง ${drivers.length} คน</div>`;
+                    } else {
+                        html += `<div class="text-red-500">❌ คนขับไม่ว่าง</div>`;
+                    }
+
+                    resDiv.innerHTML = html;
+                    resDiv.classList.remove('hidden');
+
+                } catch (e) {
+                    console.error(e);
+                }
             }
         }
-        function renderCalendar(container) { 
+
+        function renderCalendar(container) {
             const dayjs = window.dayjs;
             if (!dayjs) { container.innerHTML = '<div class="text-center text-red-500">Calendar Error: Day.js not loaded</div>'; return; }
             dayjs.locale('th'); 
@@ -668,28 +680,15 @@
                         <div class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-red-500"></span> แจ้งซ่อม/ไม่อนุมัติ</div>
                     </div>
                 </div>`;
-        } 
-        function renderCharts() { 
-            if (!state.stats) return;
-            const createChart = (id, type, labels, data, colors) => {
-                const ctx = document.getElementById(id);
-                if (!ctx) return;
-                const existingChart = Chart.getChart(ctx);
-                if (existingChart) existingChart.destroy();
-                new Chart(ctx, { type: type, data: { labels: labels, datasets: [{ label: 'Data', data: data, backgroundColor: colors, borderWidth: 1 }] }, options: { responsive: true, maintainAspectRatio: false, indexAxis: type === 'bar' && id === 'driverChart' ? 'y' : 'x', plugins: { legend: { display: type === 'doughnut' } } } });
-            };
-            try {
-                createChart('carChart', 'bar', (state.stats.carStats||[]).map(x=>x.name), (state.stats.carStats||[]).map(x=>x.count), '#3b82f6');
-                createChart('driverChart', 'bar', (state.stats.driverStats||[]).map(x=>x.name), (state.stats.driverStats||[]).map(x=>x.count), '#10b981');
-                createChart('deptChart', 'doughnut', (state.stats.deptStats||[]).map(x=>x.name), (state.stats.deptStats||[]).map(x=>x.count), ['#FF6384','#36A2EB','#FFCE56','#4BC0C0']);
-            } catch (e) { console.error("Chart Error:", e); }
         }
+
+        // --- ACTIONS ---
         function switchView(mode) { state.viewMode = mode; renderApp(); }
-        function logout() { localStorage.removeItem('carBookingUser'); localStorage.removeItem('authToken'); state.currentUser = null; renderApp(); }
+        function logout() { localStorage.removeItem('carBookingUser'); state.currentUser = null; renderApp(); }
         function hardReset() { localStorage.clear(); location.reload(); }
         function changeMonth(n) { if(window.dayjs){ state.currentDate = window.dayjs(state.currentDate).add(n, 'month').toDate(); renderApp(); } }
         function resetToToday() { state.currentDate = new Date(); renderApp(); }
-        
+
         function showBookingDetails(id) {
             const b = state.bookings.find(x => x._id === id);
             if(!b) return;
@@ -727,139 +726,222 @@
         }
 
         async function submitBooking(e) {
-            e.preventDefault(); const fd = new FormData(e.target); const data = Object.fromEntries(fd); data.useDriver = fd.get('useDriver') === 'on';
-            const res = await api.action('post', 'bookings', { ...data }); 
+            e.preventDefault(); 
+            const fd = new FormData(e.target); 
+            const data = Object.fromEntries(fd); 
+            data.useDriver = fd.get('useDriver') === 'on';
+            const start = new Date(`${data.startDate}T${data.startTime}`);
+            const end = new Date(`${data.endDate}T${data.endTime}`);
+            const now = new Date();
+            const allowTime = new Date(now.getTime() - 10 * 60000); 
+            if (start < allowTime) return Swal.fire('Error', 'ห้ามจองย้อนหลัง (เกิน 10 นาที)');
+            if (start >= end) return Swal.fire('Error', 'เวลาคืนรถต้องหลังเวลารับรถ');
+            const res = await api.action('post', 'bookings', { userId: state.currentUser.username, ...data }); 
             if(res.success) { Swal.fire('Success','จองสำเร็จ','success'); api.fetchData(); } else { Swal.fire('Error', res.message); }
         }
-        async function approveBooking(id) { const cId=document.getElementById(`c-${id}`).value; const dId=document.getElementById(`d-${id}`).value; if(!cId)return Swal.fire('เลือกรถ'); api.action('put',`bookings/${id}`,{status:'approved',carId:cId,driverId:dId||null}).then(r=>{if(r.success){Swal.fire('Success');api.fetchData()}else Swal.fire('Error',r.message)}); }
+
+        async function approveBooking(id) { const cId=document.getElementById(`c-${id}`).value; const dId=document.getElementById(`d-${id}`).value; if(!cId)return Swal.fire('เลือกรถ'); const res=await api.action('put',`bookings/${id}`,{status:'approved',carId:cId,driverId:dId||null}); if(res.success){Swal.fire('Success');api.fetchData();}else Swal.fire('Error',res.message); }
         async function addResource(e, type) { e.preventDefault(); await api.action('post', type, Object.fromEntries(new FormData(e.target))); api.fetchData(); e.target.reset(); }
         async function deleteResource(type, id) { if((await Swal.fire({title:'ยืนยันลบ?',showCancelButton:true})).isConfirmed) { await api.action('delete', `${type}/${id}`); api.fetchData(); } }
         async function addUser(e) { e.preventDefault(); const data = Object.fromEntries(new FormData(e.target)); const res = await api.action('post', 'users', data); if(res.success){Swal.fire('สำเร็จ'); api.fetchData(); e.target.reset();} else Swal.fire('Error', res.message); }
         async function deleteUser(id) { if((await Swal.fire({title:'ลบ?',showCancelButton:true})).isConfirmed) { await api.action('delete', `users/${id}`); api.fetchData(); } }
         async function toggleUser(id, current) { await api.action('put', `users/${id}`, { isActive: !current }); api.fetchData(); }
         async function unlinkLine(id) { if((await Swal.fire({title:'Unlink?',showCancelButton:true})).isConfirmed) { await api.action('put', `users/${id}`, { resetLine: true }); api.fetchData(); } }
-        
-        async function openEditUserModal(id) { 
-            const u = state.users.find(x => x._id === id); 
-            openModal('editUserModal', false, u); 
-        }
+        async function openEditUserModal(id) { const u = state.users.find(x => x._id === id); openModal('editUserModal', false, u); }
         async function handleEditUserSubmit(e) { e.preventDefault(); await api.action('put', `users/${modalData._id}`, Object.fromEntries(new FormData(e.target))); closeModal(); api.fetchData(); }
-        
-        function openResetPwdModal(id, username) { openModal('resetPwdModal', false, {id, username}); }
+        async function openResetPwdModal(id, username) { openModal('resetPwdModal', false, {id, username}); }
         async function handleResetPwd(e) { e.preventDefault(); const pwd = new FormData(e.target).get('password'); await api.action('put', `users/${modalData.id}`, { password: pwd }); closeModal(); Swal.fire('Success'); }
-        async function startTrip(id,d,t) { const {value:o}=await Swal.fire({title:'เลขไมล์',input:'number'}); if(o) { await api.action('put',`bookings/${id}`,{status:'active',startOdometer:o}); api.fetchData(); } }
-        async function endTrip(id,s) { const {value:v}=await Swal.fire({title:'คืนรถ',html:'<input id="swal-odo" class="swal2-input" placeholder="เลขไมล์จบ"><input id="swal-fuel" class="swal2-input" placeholder="ค่าน้ำมัน"><input id="swal-toll" class="swal2-input" placeholder="ทางด่วน">', preConfirm:()=>{return {endOdometer:document.getElementById('swal-odo').value, fuelCost:document.getElementById('swal-fuel').value, tollCost:document.getElementById('swal-toll').value}}}); if(v){await api.action('put',`bookings/${id}`,{status:'completed',...v});api.fetchData();}}
-        async function cancelBooking(id) { if((await Swal.fire({title:'ยกเลิก?',showCancelButton:true})).isConfirmed) { await api.action('put',`bookings/${id}`,{status:'cancelled',cancelledBy:state.currentUser.username}); api.fetchData(); } }
-        async function openLineQR() { const res = await api.action('post', 'generate-link-token', {userId: state.currentUser.id}); if(res.success) Swal.fire({ title: 'LINE Connect', html: `<img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`https://line.me/R/oaMessage/${LINE_BOT_ID}/?!link ${res.data.token}`)}" class="mx-auto">` }); }
+        async function openBlockModal(type, id, name) { openModal('blockModal', false, {type, id, name}); }
+        async function handleBlockSubmit(e) { e.preventDefault(); const data = Object.fromEntries(new FormData(e.target)); const payload = { ...data, userId: 'ADMIN', status: 'maintenance', useDriver: false, carId: modalData.type==='car'?modalData.id:null, driverId: modalData.type==='driver'?modalData.id:null, remarks: `[ปิด] ${data.remarks}` }; await api.action('post', 'bookings', payload); closeModal(); api.fetchData(); }
+        async function startTrip(id, date, time) { const {value:o}=await Swal.fire({title:'เลขไมล์',input:'number'}); if(o) { await api.action('put',`bookings/${id}`,{status:'active',startOdometer:o}); api.fetchData(); } }
         
-        function openExtendModal(id, endDate, endTime) { openModal('extendModal', false, { id, endDate, endTime }); document.getElementById('extend-date').value = endDate; document.getElementById('extend-time').value = endTime; }
-        async function handleExtendSubmit(e) { e.preventDefault(); const res = await api.action('post', `bookings/${modalData.id}/extend`, { newEndDate: document.getElementById('extend-date').value, newEndTime: document.getElementById('extend-time').value }); if(res.success) { Swal.fire('Success'); closeModal(); api.fetchData(); } else Swal.fire('Error', res.message); }
-        function openHistoryModal(type, id, name) { openModal('historyModal', false, {type, id, name}); renderHistoryModalContent(type, id); }
-        function renderHistoryModalContent(type, id) { const b=state.bookings.filter(x=>['completed','active'].includes(x.status) && (type==='car'?x.carId?._id===id:x.driverId?._id===id)); document.getElementById('history-modal-body').innerHTML = b.length?`<ul>${b.map(x=>`<li>${x.startDate}: ${x.status}</li>`).join('')}</ul>`:'ไม่มีประวัติ'; }
+        // 🔥 UPDATE: End Trip with Fuel/Toll Input
+        async function endTrip(id, startOdo) { 
+            const { value: formValues } = await Swal.fire({
+                title: 'บันทึกการคืนรถ',
+                html:
+                    `<input id="swal-odo" class="swal2-input" placeholder="เลขไมล์สิ้นสุด (ต้องมากกว่า ${startOdo})">` +
+                    `<input id="swal-fuel" class="swal2-input" placeholder="ค่าน้ำมัน (บาท)">` +
+                    `<input id="swal-toll" class="swal2-input" placeholder="ค่าทางด่วน (บาท)">`,
+                focusConfirm: false,
+                preConfirm: () => {
+                    const odo = document.getElementById('swal-odo').value;
+                    const fuel = document.getElementById('swal-fuel').value;
+                    const toll = document.getElementById('swal-toll').value;
+                    if (!odo || Number(odo) <= startOdo) {
+                        Swal.showValidationMessage(`เลขไมล์ต้องมากกว่า ${startOdo}`);
+                        return false;
+                    }
+                    return { 
+                        endOdometer: Number(odo), 
+                        fuelCost: fuel ? Number(fuel) : 0, 
+                        tollCost: toll ? Number(toll) : 0 
+                    };
+                }
+            });
+
+            if (formValues) {
+                await api.action('put', `bookings/${id}`, { 
+                    status: 'completed', 
+                    endOdometer: formValues.endOdometer,
+                    fuelCost: formValues.fuelCost,
+                    tollCost: formValues.tollCost
+                });
+                api.fetchData();
+            }
+        }
+
+        async function cancelBooking(id) { if((await Swal.fire({title:'ยกเลิก?',showCancelButton:true})).isConfirmed) { await api.action('put',`bookings/${id}`,{status:'cancelled',cancelledBy:state.currentUser.username}); api.fetchData(); } }
+        async function rejectBooking(id) { const {value:r}=await Swal.fire({title:'เหตุผล',input:'text'}); if(r) { await api.action('put',`bookings/${id}`,{status:'rejected',rejectionReason:r}); api.fetchData(); } }
+        async function handleChangePwdSubmit(e) { e.preventDefault(); const res = await api.action('post', 'change-password', { userId: state.currentUser.id, ...Object.fromEntries(new FormData(e.target)) }); if(res.success) { Swal.fire('สำเร็จ'); closeModal(); if(state.currentUser.mustChangePassword) logout(); } else Swal.fire('Error', res.message); }
+        async function openLineQR() { const res = await api.action('post', 'generate-link-token', {userId: state.currentUser.id}); if(res.success) Swal.fire({ title: 'LINE Connect', html: `<img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`https://line.me/R/oaMessage/${LINE_BOT_ID}/?!link ${res.data.token}`)}" class="mx-auto">` }); }
+
+        // --- NEW: Extension Modal ---
+        function openExtendModal(id, endDate, endTime) {
+            openModal('extendModal', false, { id, endDate, endTime });
+            document.getElementById('extend-date').value = endDate;
+            document.getElementById('extend-time').value = endTime;
+        }
+
+        async function handleExtendSubmit(e) {
+            e.preventDefault();
+            const newEndDate = document.getElementById('extend-date').value;
+            const newEndTime = document.getElementById('extend-time').value;
+            
+            const res = await api.action('post', `bookings/${modalData.id}/extend`, { newEndDate, newEndTime });
+            
+            if(res.success) {
+                Swal.fire('Success', 'ต่อเวลาสำเร็จ', 'success');
+                closeModal();
+                api.fetchData();
+            } else {
+                Swal.fire('Error', res.message, 'error');
+            }
+        }
+
+        // --- NEW: History Features ---
+        function openHistoryModal(type, id, name) {
+            openModal('historyModal', false, {type, id, name});
+            renderHistoryModalContent(type, id);
+        }
+
+        function renderHistoryModalContent(type, id) {
+            const historyBody = document.getElementById('history-modal-body');
+            const historyTitle = document.getElementById('history-modal-title');
+            
+            historyTitle.textContent = `ประวัติการทำงาน: ${modalData.name}`;
+            
+            const history = state.bookings.filter(b => {
+                if(!['completed', 'active', 'approved'].includes(b.status)) return false;
+                if(type === 'car') return b.carId?._id === id;
+                if(type === 'driver') return b.driverId?._id === id;
+                return false;
+            }).sort((a,b) => new Date(b.startDate) - new Date(a.startDate)); // Newest first
+
+            if(history.length === 0) {
+                historyBody.innerHTML = '<div class="text-center text-gray-400 py-10">ไม่พบประวัติการทำงาน</div>';
+                return;
+            }
+
+            const rows = history.map(b => {
+                const user = state.users.find(u => u.username === b.userId) || {firstName: b.userId, lastName: ''};
+                const distance = b.endOdometer && b.startOdometer ? (b.endOdometer - b.startOdometer) + ' km' : '-';
+                const statusColor = b.status === 'active' ? 'text-green-600' : (b.status==='completed' ? 'text-gray-600' : 'text-blue-600');
+                
+                // Add Cost Display in Modal
+                const costs = b.fuelCost || b.tollCost 
+                    ? `<br><span class="text-xs text-orange-500">น้ำมัน: ${b.fuelCost || 0} / ทางด่วน: ${b.tollCost || 0}</span>` 
+                    : '';
+
+                return `
+                <tr class="border-b text-sm">
+                    <td class="p-3">${b.startDate}<br><span class="text-xs text-gray-400">${b.startTime}</span></td>
+                    <td class="p-3 font-bold">${user.firstName} ${user.lastName}</td>
+                    <td class="p-3 truncate max-w-[150px]">${b.remarks}</td>
+                    <td class="p-3 text-right">
+                        ${b.startOdometer || '-'}<br>
+                        <span class="text-xs text-gray-400">จบ: ${b.endOdometer || '-'}</span>
+                    </td>
+                    <td class="p-3 text-right">
+                        <div class="font-bold">${distance}</div>
+                        ${costs}
+                    </td>
+                    <td class="p-3 text-right uppercase ${statusColor} text-xs font-bold">${b.status}</td>
+                </tr>`;
+            }).join('');
+
+            historyBody.innerHTML = `
+                <div class="overflow-x-auto max-h-[400px]">
+                    <table class="w-full text-left">
+                        <thead class="bg-gray-100 text-gray-600 sticky top-0">
+                            <tr>
+                                <th class="p-3">วันที่</th>
+                                <th class="p-3">ผู้ใช้</th>
+                                <th class="p-3">งาน</th>
+                                <th class="p-3 text-right">ไมล์ (เริ่ม/จบ)</th>
+                                <th class="p-3 text-right">ระยะทาง/ค่าใช้จ่าย</th>
+                                <th class="p-3 text-right">สถานะ</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>`;
+        }
 
         // --- MODALS ---
         let modalData = {};
-        function openModal(id, force=false, data=null) { 
-            modalData = data || {}; 
-            document.getElementById(id).classList.add('show'); 
-            // 🔥 Populate Edit User Modal with Dropdown
-            if(id==='editUserModal' && data){ 
-                document.getElementById('edit-fn').value = data.firstName; 
-                document.getElementById('edit-ln').value = data.lastName; 
-                // NEW: Set select value
-                const deptSelect = document.getElementById('edit-dept');
-                if(deptSelect) deptSelect.value = data.department;
-
-                document.getElementById('edit-email').value = data.email; 
-            } 
-        }
+        function openModal(id, force=false, data=null) { modalData = data || {}; document.getElementById(id).classList.add('show'); if(id==='editUserModal' && data){ document.getElementById('edit-fn').value = data.firstName; document.getElementById('edit-ln').value = data.lastName; document.getElementById('edit-dept').value = data.department; document.getElementById('edit-email').value = data.email; } }
         function closeModal() { document.querySelectorAll('.modal').forEach(el => el.classList.remove('show')); }
 
         function renderModals() {
             const container = document.getElementById('modals-container');
             container.innerHTML = `
                 <div id="rejectModal" class="modal fixed inset-0 bg-black/60 flex items-center justify-center z-50 opacity-0 pointer-events-none"><div class="bg-white p-6 rounded-xl shadow-xl w-80 modal-content"><h3 class="font-bold mb-3 text-red-600">เหตุผลไม่อนุมัติ</h3><textarea id="rejectReason" class="w-full border p-2 rounded" rows="3"></textarea><div class="flex justify-end gap-2 mt-3"><button onclick="closeModal()" class="text-gray-500">ยกเลิก</button><button onclick="confirmReject()" class="bg-red-600 text-white px-3 py-1 rounded">ยืนยัน</button></div></div></div>
-                
-                <!-- 🔥 EDIT USER MODAL with Dropdown -->
-                <div id="editUserModal" class="modal fixed inset-0 bg-black/60 flex items-center justify-center z-50 opacity-0 pointer-events-none">
-                    <div class="bg-white p-6 rounded-xl w-96 modal-content">
-                        <h3 class="font-bold mb-4">แก้ไขผู้ใช้</h3>
-                        <form onsubmit="handleEditUserSubmit(event)" class="space-y-3">
-                            <input name="firstName" id="edit-fn" placeholder="ชื่อ" class="w-full border p-2 rounded" required>
-                            <input name="lastName" id="edit-ln" placeholder="นามสกุล" class="w-full border p-2 rounded" required>
-                            <select name="department" id="edit-dept" class="w-full border p-2 rounded" required>
-                                <option value="">-- เลือกแผนก --</option>
-                                ${getDeptOptions()}
-                            </select>
-                            <input name="email" id="edit-email" placeholder="email" class="w-full border p-2 rounded" required>
-                            <div class="flex justify-end gap-2">
-                                <button type="button" onclick="closeModal()" class="text-gray-500">ยกเลิก</button>
-                                <button class="bg-blue-600 text-white px-3 py-1 rounded">บันทึก</button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-
+                <div id="editUserModal" class="modal fixed inset-0 bg-black/60 flex items-center justify-center z-50 opacity-0 pointer-events-none"><div class="bg-white p-6 rounded-xl w-96 modal-content"><h3 class="font-bold mb-4">แก้ไขผู้ใช้</h3><form onsubmit="handleEditUserSubmit(event)" class="space-y-3"><input name="firstName" id="edit-fn" placeholder="ชื่อ" class="w-full border p-2 rounded" required><input name="lastName" id="edit-ln" placeholder="นามสกุล" class="w-full border p-2 rounded" required><input name="department" id="edit-dept" placeholder="แผนก" class="w-full border p-2 rounded" required><input name="email" id="edit-email" placeholder="email" class="w-full border p-2 rounded" required><div class="flex justify-end gap-2"><button type="button" onclick="closeModal()" class="text-gray-500">ยกเลิก</button><button class="bg-blue-600 text-white px-3 py-1 rounded">บันทึก</button></div></form></div></div>
                 <div id="resetPwdModal" class="modal fixed inset-0 bg-black/60 flex items-center justify-center z-50 opacity-0 pointer-events-none"><div class="bg-white p-6 rounded-xl w-80 modal-content"><h3 class="font-bold mb-4">รีเซ็ตรหัสผ่าน</h3><form onsubmit="handleResetPwd(event)" class="space-y-3"><input type="password" name="password" placeholder="รหัสใหม่" class="w-full border p-2 rounded" required><div class="flex justify-end gap-2"><button type="button" onclick="closeModal()" class="text-gray-500">ยกเลิก</button><button class="bg-orange-500 text-white px-3 py-1 rounded">ยืนยัน</button></div></form></div></div>
+                <div id="blockModal" class="modal fixed inset-0 bg-black/60 flex items-center justify-center z-50 opacity-0 pointer-events-none"><div class="bg-white p-6 rounded-xl w-96 modal-content"><h3 class="font-bold mb-4 text-red-600">แจ้งซ่อม / ลา</h3><form onsubmit="handleBlockSubmit(event)" class="space-y-3"><div class="grid grid-cols-2 gap-2"><input type="date" name="startDate" class="border p-2 rounded w-full" required><input type="time" name="startTime" class="border p-2 rounded w-full" required></div><div class="grid grid-cols-2 gap-2"><input type="date" name="endDate" class="border p-2 rounded w-full" required><input type="time" name="endTime" class="border p-2 rounded w-full" required></div><input name="remarks" placeholder="สาเหตุ" class="border p-2 rounded w-full" required><div class="flex justify-end gap-2"><button type="button" onclick="closeModal()" class="text-gray-500">ยกเลิก</button><button class="bg-red-600 text-white px-3 py-1 rounded">บันทึก</button></div></form></div></div>
+                <div id="changePwdModal" class="modal fixed inset-0 bg-black/70 flex items-center justify-center z-50 opacity-0 pointer-events-none"><div class="bg-white p-6 rounded-xl w-80 modal-content"><h3 class="font-bold mb-4">เปลี่ยนรหัสผ่าน</h3><form onsubmit="handleChangePwdSubmit(event)" class="space-y-3"><input type="password" name="oldPassword" placeholder="รหัสเดิม" class="w-full border p-2 rounded" required><input type="password" name="newPassword" placeholder="รหัสใหม่" class="w-full border p-2 rounded" required><button class="w-full bg-blue-600 text-white py-2 rounded">ยืนยัน</button></form></div></div>
                 
-                <!-- 🔥 BLOCK MODAL (For Cars/Drivers Maintenance/Leave) -->
-                <div id="blockModal" class="modal fixed inset-0 bg-black/60 flex items-center justify-center z-50 opacity-0 pointer-events-none">
-                    <div class="bg-white p-6 rounded-xl w-96 modal-content">
-                        <h3 class="font-bold mb-4 text-red-600">แจ้งซ่อม / ลา</h3>
-                        <form onsubmit="handleBlockSubmit(event)" class="space-y-3">
-                            <div class="grid grid-cols-2 gap-2">
-                                <input type="date" name="startDate" class="border p-2 rounded w-full" required>
-                                <input type="time" name="startTime" class="border p-2 rounded w-full" required>
-                            </div>
-                            <div class="grid grid-cols-2 gap-2">
-                                <input type="date" name="endDate" class="border p-2 rounded w-full" required>
-                                <input type="time" name="endTime" class="border p-2 rounded w-full" required>
-                            </div>
-                            <input name="remarks" placeholder="สาเหตุ" class="border p-2 rounded w-full" required>
-                            <div class="flex justify-end gap-2">
+                <!-- History Modal -->
+                <div id="historyModal" class="modal fixed inset-0 bg-black/70 flex items-center justify-center z-50 opacity-0 pointer-events-none">
+                    <div class="bg-white p-6 rounded-xl w-full max-w-2xl modal-content">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 id="history-modal-title" class="font-bold text-lg">ประวัติการทำงาน</h3>
+                            <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600"><i data-lucide="x"></i></button>
+                        </div>
+                        <div id="history-modal-body"></div>
+                    </div>
+                </div>
+
+                <!-- Extend Time Modal -->
+                <div id="extendModal" class="modal fixed inset-0 bg-black/70 flex items-center justify-center z-50 opacity-0 pointer-events-none">
+                    <div class="bg-white p-6 rounded-xl w-80 modal-content">
+                        <h3 class="font-bold mb-4 text-blue-600">ขอต่อเวลาเพิ่ม</h3>
+                        <form onsubmit="handleExtendSubmit(event)" class="space-y-3">
+                            <div><label class="text-xs">สิ้นสุดวันที่</label><input type="date" id="extend-date" class="w-full border p-2 rounded" required></div>
+                            <div><label class="text-xs">เวลาใหม่</label><input type="time" id="extend-time" class="w-full border p-2 rounded" required></div>
+                            <div class="flex justify-end gap-2 mt-4">
                                 <button type="button" onclick="closeModal()" class="text-gray-500">ยกเลิก</button>
-                                <button class="bg-red-600 text-white px-3 py-1 rounded">บันทึก</button>
+                                <button class="bg-blue-600 text-white px-3 py-1 rounded">ยืนยัน</button>
                             </div>
                         </form>
                     </div>
                 </div>
-
-                <div id="historyModal" class="modal fixed inset-0 bg-black/70 flex items-center justify-center z-50 opacity-0 pointer-events-none"><div class="bg-white p-6 rounded-xl w-full max-w-2xl modal-content"><div class="flex justify-between items-center mb-4"><h3 id="history-modal-title" class="font-bold text-lg">ประวัติการทำงาน</h3><button onclick="closeModal()" class="text-gray-400 hover:text-gray-600"><i data-lucide="x"></i></button></div><div id="history-modal-body"></div></div></div>
-                <div id="extendModal" class="modal fixed inset-0 bg-black/70 flex items-center justify-center z-50 opacity-0 pointer-events-none"><div class="bg-white p-6 rounded-xl w-80 modal-content"><h3 class="font-bold mb-4 text-blue-600">ขอต่อเวลาเพิ่ม</h3><form onsubmit="handleExtendSubmit(event)" class="space-y-3"><div><label class="text-xs">สิ้นสุดวันที่</label><input type="date" id="extend-date" class="w-full border p-2 rounded" required></div><div><label class="text-xs">เวลาใหม่</label><input type="time" id="extend-time" class="w-full border p-2 rounded" required></div><div class="flex justify-end gap-2 mt-4"><button type="button" onclick="closeModal()" class="text-gray-500">ยกเลิก</button><button class="bg-blue-600 text-white px-3 py-1 rounded">ยืนยัน</button></div></form></div></div>
-                <div id="changePwdModal" class="modal fixed inset-0 bg-black/70 flex items-center justify-center z-50 opacity-0 pointer-events-none"><div class="bg-white p-6 rounded-xl w-80 modal-content"><h3 class="font-bold mb-4">เปลี่ยนรหัสผ่าน</h3><form onsubmit="handleChangePwdSubmit(event)" class="space-y-3"><input type="password" name="oldPassword" placeholder="รหัสเดิม" class="w-full border p-2 rounded" required><input type="password" name="newPassword" placeholder="รหัสใหม่" class="w-full border p-2 rounded" required><button class="w-full bg-blue-600 text-white py-2 rounded">ยืนยัน</button></form></div></div>
             `;
         }
 
-        async function openBlockModal(type, id, name) { 
-            openModal('blockModal', false, {type, id, name}); 
-        }
-        
-        async function handleBlockSubmit(e) { 
-            e.preventDefault(); 
-            const data = Object.fromEntries(new FormData(e.target)); 
-            const payload = { 
-                ...data, 
-                userId: 'ADMIN', // This userId is mostly descriptive here as backend checks admin role
-                status: 'maintenance', 
-                useDriver: false, 
-                carId: modalData.type==='car'?modalData.id:null, 
-                driverId: modalData.type==='driver'?modalData.id:null, 
-                remarks: `[ปิดงาน] ${data.remarks}` 
-            }; 
-            
-            const res = await api.action('post', 'bookings', payload); 
-            if (res.success) {
-                Swal.fire('Success', 'บันทึกเรียบร้อย', 'success');
-                closeModal(); 
-                api.fetchData(); 
-            } else {
-                Swal.fire('Error', res.message, 'error');
-            }
+        function confirmReject() {
+             const reason = document.getElementById('rejectReason').value;
+             if(!reason) return Swal.fire('กรุณาระบุเหตุผล');
+             api.action('put', `bookings/${modalData.id}`, { status: 'rejected', rejectionReason: reason }).then(()=>{ closeModal(); api.fetchData(); });
         }
 
-        function confirmReject() { const r=document.getElementById('rejectReason').value; if(!r)return Swal.fire('ระบุเหตุผล'); api.action('put',`bookings/${modalData.id}`,{status:'rejected',rejectionReason:r}).then(()=>{closeModal();api.fetchData();}); }
+        // Init
+        window.onload = () => {
+            renderApp();
+            if (state.currentUser) api.fetchData();
+        }
 
-        window.onload = () => { renderApp(); if(state.currentUser) api.fetchData(); }
     </script>
 </body>
 </html>
