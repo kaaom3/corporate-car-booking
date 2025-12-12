@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Corporate Car Booking</title>
+    <title>Vana Nava Corporate Trip Booking</title>
     
     <!-- Libraries -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -16,981 +16,1071 @@
     <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/isBetween.js"></script>
 
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;700&display=swap');
         body { font-family: 'Sarabun', sans-serif; background-color: #f3f4f6; }
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        
+        /* Custom Scrollbar */
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 4px; }
-        .fade-in { animation: fadeIn 0.3s ease-in-out; }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        .modal { transition: opacity 0.2s ease; }
-        .modal.show { opacity: 1; pointer-events: auto; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
+
+        /* Animations */
+        .fade-in { animation: fadeIn 0.4s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        /* Modal Transitions */
+        .modal { transition: opacity 0.2s ease, visibility 0.2s ease; opacity: 0; visibility: hidden; pointer-events: none; z-index: 50; }
+        .modal.show { opacity: 1; visibility: visible; pointer-events: auto; }
         .modal-content { transform: scale(0.95); transition: transform 0.2s ease; }
         .modal.show .modal-content { transform: scale(1); }
-        
-        .calendar-day { min-height: 120px; transition: all 0.2s; }
+
+        /* Calendar Styles */
+        .calendar-day { min-height: 120px; background: white; border-right: 1px solid #f3f4f6; border-bottom: 1px solid #f3f4f6; transition: background 0.2s; }
         .calendar-day:hover { background-color: #f9fafb; }
-        .event-pill { cursor: pointer; transition: transform 0.1s; }
-        .event-pill:hover { transform: scale(1.02); filter: brightness(0.95); }
+        .calendar-day.other-month { background-color: #f9fafb; color: #d1d5db; }
+        .event-pill { font-size: 11px; padding: 2px 6px; border-radius: 4px; margin-bottom: 2px; color: white; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; box-shadow: 0 1px 2px rgba(0,0,0,0.1); transition: transform 0.1s; }
+        .event-pill:hover { transform: scale(1.02); filter: brightness(0.95); z-index: 10; position: relative; }
+        
+        /* Status Colors */
+        .status-approved { background-color: #2563eb; } /* Blue */
+        .status-active { background-color: #16a34a; }   /* Green */
+        .status-maintenance { background-color: #f97316; } /* Orange */
+        .status-pending { background-color: #eab308; } /* Yellow */
+        .status-rejected { background-color: #ef4444; } /* Red */
+        .status-completed { background-color: #0d9488; } /* Teal */
+        .status-cancelled { background-color: #9ca3af; text-decoration: line-through; } /* Gray */
+
+        /* Bulk Calendar Styles */
+        .bulk-day { height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; border: 1px solid #e5e7eb; border-radius: 8px; transition: all 0.2s; position: relative; }
+        .bulk-day:hover { background-color: #f3f4f6; border-color: #d1d5db; }
+        .bulk-day.selected { background-color: #fff7ed; border-color: #f97316; color: #c2410c; font-weight: bold; box-shadow: 0 2px 4px rgba(249, 115, 22, 0.1); }
+        .bulk-day.has-conflict { background-color: #fee2e2; border-color: #ef4444; color: #b91c1c; opacity: 0.8; } /* Conflict styling */
+        .bulk-header { cursor: pointer; transition: color 0.2s; }
+        .bulk-header:hover { color: #f97316; text-decoration: underline; }
+        .dot-indicator { width: 6px; height: 6px; border-radius: 50%; position: absolute; bottom: 6px; }
+        .dot-conflict { background-color: #ef4444; }
     </style>
-    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;700&display=swap" rel="stylesheet">
 </head>
-<body class="text-gray-800">
+<body class="text-gray-800 antialiased font-sarabun">
 
     <div id="app" class="min-h-screen flex flex-col"></div>
     <div id="modals-container"></div>
     
     <script>
-        // --- SETUP ---
+        // --- INITIAL SETUP ---
         dayjs.extend(window.dayjs_plugin_isBetween);
         dayjs.locale('th');
 
-        // --- CONFIG ---
-        // 👇 ใส่ลิงก์ ngrok ของคุณที่นี่ (อย่าลืม /api)
+        // 🔥 CONFIGURATION
         const API_URL = 'https://obtrusive-interlinearly-everette.ngrok-free.dev/api'; 
-        
         const LINE_BOT_ID = '@342rmqlv'; 
+        const DEPARTMENTS = ["Admissions", "Executive Office", "Engineer", "Food & Beverage", "Finance", "Housekeeping", "HR & TQM", "Information & Technology", "Operations", "Retails", "Sales"];
 
-        // 🔥 FIX: แก้ปัญหา ngrok ไม่ส่งข้อมูล (Skip Warning Page)
+        // Axios Configuration
         axios.defaults.headers.common['ngrok-skip-browser-warning'] = 'true';
-        axios.defaults.headers.common['User-Agent'] = 'CarBookingApp'; // หลอกว่าเป็นแอป
-
-        // 🔥 AXIOS INTERCEPTOR: Auto Attach Token 🔐
         axios.interceptors.request.use(config => {
             const token = localStorage.getItem('authToken');
-            if (token) {
-                config.headers['Authorization'] = `Bearer ${token}`;
-            }
+            if (token) config.headers['Authorization'] = `Bearer ${token}`;
             return config;
         }, error => Promise.reject(error));
 
-        // 🔥 AXIOS INTERCEPTOR: Handle 401/403 (Token Expired)
         axios.interceptors.response.use(response => response, error => {
             if (error.response && (error.response.status === 401 || error.response.status === 403)) {
                 if (!error.config.url.includes('/login')) {
-                    Swal.fire({
-                        icon: 'warning',
-                        title: 'Session หมดอายุ',
-                        text: 'กรุณาเข้าสู่ระบบใหม่',
-                        timer: 2000,
-                        showConfirmButton: false
-                    }).then(() => {
-                        logout();
-                    });
+                    localStorage.removeItem('authToken');
+                    localStorage.removeItem('carBookingUser');
+                    location.reload();
                 }
             }
             return Promise.reject(error);
         });
 
-        // --- STATE ---
-        const state = {
-            currentUser: null,
-            viewMode: 'dashboard',
-            bookings: [],
-            cars: [],
-            drivers: [],
-            users: [],
-            stats: { carStats: [], deptStats: [], driverStats: [] },
-            currentDate: new Date(),
-            loading: false
+        // Global State
+        const state = { 
+            currentUser: null, 
+            viewMode: 'dashboard', 
+            bookings: [], 
+            cars: [], 
+            drivers: [], 
+            users: [], 
+            stats: {}, 
+            currentDate: new Date() 
         };
+        let modalData = {};
+        let bulkState = { selectedDates: new Set(), currentMonth: dayjs(), resourceType: null, resourceId: null, resourceName: null };
+        let autoRefreshInterval = null; // 🔥 NEW: For Auto Refresh
 
-        // Load User Session
-        try {
-            const savedUser = localStorage.getItem('carBookingUser');
-            const savedToken = localStorage.getItem('authToken');
-            if (savedUser && savedToken) {
-                state.currentUser = JSON.parse(savedUser);
-            } else {
-                localStorage.removeItem('carBookingUser');
-                localStorage.removeItem('authToken');
-            }
-        } catch (e) { localStorage.clear(); }
+        // Load Session
+        try { state.currentUser = JSON.parse(localStorage.getItem('carBookingUser')); } catch (e) { localStorage.clear(); }
 
-        // --- API CLIENT ---
+        // API Wrapper
         const api = {
-            login: (data) => axios.post(`${API_URL}/login`, data),
-            fetchData: async () => {
+            login: (d) => axios.post(`${API_URL}/login`, d),
+            fetchData: async (bg = false) => { // bg = background fetch (no loading spinner if implemented)
                 try {
-                    const [carsRes, driversRes, bookingsRes] = await Promise.all([
-                        axios.get(`${API_URL}/cars`).catch(()=>({data:[]})),
-                        axios.get(`${API_URL}/drivers`).catch(()=>({data:[]})),
+                    const [c, d, b] = await Promise.all([
+                        axios.get(`${API_URL}/cars`).catch(()=>({data:[]})), 
+                        axios.get(`${API_URL}/drivers`).catch(()=>({data:[]})), 
                         axios.get(`${API_URL}/bookings`).catch(()=>({data:[]}))
                     ]);
-
-                    state.cars = Array.isArray(carsRes.data) ? carsRes.data : [];
-                    state.drivers = Array.isArray(driversRes.data) ? driversRes.data : [];
-                    state.bookings = Array.isArray(bookingsRes.data) ? bookingsRes.data : [];
+                    
+                    // Check if data actually changed before re-rendering (Simple JSON check to avoid flickering)
+                    const newData = JSON.stringify({c:c.data, d:d.data, b:b.data});
+                    const oldData = JSON.stringify({c:state.cars, d:state.drivers, b:state.bookings});
+                    
+                    state.cars = c.data || []; 
+                    state.drivers = d.data || []; 
+                    state.bookings = b.data || [];
                     
                     if (state.currentUser?.role === 'admin') {
-                        const [usersRes, statsRes] = await Promise.all([
-                            axios.get(`${API_URL}/users`).catch(()=>({data:[]})),
+                        const [u, s] = await Promise.all([
+                            axios.get(`${API_URL}/users`).catch(()=>({data:[]})), 
                             axios.get(`${API_URL}/stats`).catch(()=>({data:{}}))
                         ]);
-                        state.users = Array.isArray(usersRes.data) ? usersRes.data : [];
-                        state.stats = statsRes.data || { carStats: [], deptStats: [], driverStats: [] };
+                        state.users = u.data || []; 
+                        state.stats = s.data || {};
                     }
-                    renderApp(); 
-                } catch (error) { 
-                    console.error("Fetch Error:", error);
-                    if (error.response?.status !== 401 && error.response?.status !== 403) {
-                         if(!document.getElementById('connection-error')) {
-                            Swal.fire({
-                                icon: 'error',
-                                title: 'เชื่อมต่อ Server ไม่ได้',
-                                text: 'กรุณาตรวจสอบลิงก์ ngrok หรือ Server',
-                                toast: true, position: 'top-end', showConfirmButton: false, timer: 5000
-                            });
-                        }
-                    }
-                    renderApp(); 
-                }
+                    
+                    if (!bg || newData !== oldData) renderApp(); 
+                } catch (e) { console.error("Fetch Error:", e); }
             },
-            action: async (method, endpoint, data) => {
-                try {
-                    const res = await axios[method](`${API_URL}/${endpoint}`, data);
-                    return { success: true, data: res.data };
-                } catch (err) {
-                    return { success: false, message: err.response?.data?.message || err.message };
-                }
+            action: async (m, ep, d) => { 
+                try { 
+                    const r = await axios[m](`${API_URL}/${ep}`, d); 
+                    return { success: true, data: r.data }; 
+                } catch (e) { 
+                    return { success: false, message: e.response?.data?.message || e.message }; 
+                } 
             }
         };
 
-        // --- RENDER FUNCTIONS ---
+        // --- RENDER MAIN ---
         function renderApp() {
             const app = document.getElementById('app');
+            // Preserve scroll position if refreshing in background
+            const scrollPos = window.scrollY;
+            
             app.innerHTML = '';
-
-            try {
-                if (!state.currentUser) {
-                    renderLogin(app);
-                } else {
-                    renderNavbar(app);
-                    renderMainContent(app);
-                    renderModals();
-                }
+            
+            if (!state.currentUser) {
+                renderLogin(app);
+                if(autoRefreshInterval) clearInterval(autoRefreshInterval);
+            } else {
+                renderNavbar(app);
+                renderMainContent(app);
+                renderModals();
                 lucide.createIcons();
-            } catch (e) {
-                console.error("Render Crash:", e);
-                app.innerHTML = `<div class="p-10 text-center text-red-500">Error: ${e.message}</div>`;
+                
+                // 🔥 RESTORE SCROLL
+                window.scrollTo(0, scrollPos);
+
+                // 🔥 START AUTO REFRESH (Every 10s)
+                if(!autoRefreshInterval) {
+                    autoRefreshInterval = setInterval(() => api.fetchData(true), 10000);
+                }
             }
         }
 
-        function renderLogin(container) {
-            container.innerHTML = `
-                <div class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4 fade-in">
-                    <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md text-center">
-                        <div class="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"><i data-lucide="car" class="text-blue-600 w-8 h-8"></i></div>
-                        <h1 class="text-2xl font-bold mb-2 text-gray-800">Corporate Car Booking</h1>
-                        <form id="loginForm" class="space-y-4 text-left mt-6">
-                            <div><label class="text-xs font-bold text-gray-600">Username</label><input type="text" name="username" class="w-full border p-3 rounded-lg mt-1" required></div>
-                            <div><label class="text-xs font-bold text-gray-600">Password</label><input type="password" name="password" class="w-full border p-3 rounded-lg mt-1" required></div>
-                            <button type="submit" class="w-full bg-blue-600 text-white p-3 rounded-xl hover:bg-blue-700 font-bold shadow-lg transition">เข้าสู่ระบบ</button>
-                        </form>
+        // 🔥 VANA NAVA THEMED LOGIN UI 🔥
+        function renderLogin(c) {
+            c.innerHTML = `
+            <div class="min-h-screen w-full flex items-center justify-center bg-blue-900 relative overflow-hidden fade-in">
+                <!-- Background with Blur Overlay -->
+                <div class="absolute inset-0 z-0">
+                     <img src="./11-12-2025 17-28-23.png" onerror="this.src='https://images.unsplash.com/photo-1575429198097-0414ec08e8cd?q=80&w=2940&auto=format&fit=crop'" 
+                         class="w-full h-full object-cover opacity-60 blur-sm scale-105" alt="Background">
+                    <div class="absolute inset-0 bg-gradient-to-t from-blue-900/90 to-cyan-800/40"></div>
+                </div>
+
+                <!-- Login Card -->
+                <div class="bg-white/95 backdrop-blur-md p-8 md:p-10 rounded-2xl shadow-2xl w-full max-w-[400px] relative z-10 border border-white/20">
+                    
+                    <!-- Header & Logo -->
+                    <div class="text-center mb-8">
+                        <div class="flex items-center justify-center mb-4 relative">
+                             <div class="relative">
+                                <i data-lucide="palmtree" class="w-20 h-20 text-blue-600 drop-shadow-sm"></i>
+                                <div class="absolute -bottom-2 -right-3 bg-white rounded-full p-1.5 shadow-md border border-gray-100">
+                                    <i data-lucide="bus" class="w-8 h-8 text-cyan-500 fill-cyan-50"></i>
+                                </div>
+                             </div>
+                        </div>
+                        <h1 class="text-2xl font-bold text-gray-800 tracking-tight">Vana Nava Corporate Trip</h1>
+                        <p class="text-sm text-gray-500 mt-1 font-medium">ระบบจองรถรับ-ส่งพนักงาน (Vana Nava Water Jungle)</p>
                     </div>
-                </div>`;
+
+                    <form id="loginForm" class="space-y-5">
+                        <!-- Username -->
+                        <div>
+                            <label class="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">รหัสพนักงาน</label>
+                            <div class="relative group">
+                                <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                                    <i data-lucide="user" class="text-gray-400 w-5 h-5 group-focus-within:text-blue-500 transition-colors"></i>
+                                </div>
+                                <input name="username" class="w-full border border-gray-300 p-3 pl-11 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-gray-50 focus:bg-white placeholder-gray-400" placeholder="ระบุรหัสพนักงาน" required>
+                            </div>
+                        </div>
+
+                        <!-- Password -->
+                        <div>
+                            <label class="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">รหัสผ่าน</label>
+                            <div class="relative group">
+                                <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                                    <i data-lucide="lock" class="text-gray-400 w-5 h-5 group-focus-within:text-blue-500 transition-colors"></i>
+                                </div>
+                                <input type="password" name="password" class="w-full border border-gray-300 p-3 pl-11 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-gray-50 focus:bg-white placeholder-gray-400" placeholder="ระบุรหัสผ่าน" required>
+                            </div>
+                            <!-- Forgot Password -->
+                            <div class="text-right mt-2">
+                                <a href="#" onclick="Swal.fire({icon:'info', title:'ลืมรหัสผ่าน?', text:'กรุณาติดต่อแผนก IT หรือผู้ดูแลระบบเพื่อรีเซ็ตรหัสผ่าน'})" class="text-xs text-blue-600 hover:text-blue-800 font-medium hover:underline transition">ลืมรหัสผ่าน?</a>
+                            </div>
+                        </div>
+
+                        <!-- Button -->
+                        <button class="w-full bg-gradient-to-r from-blue-600 to-cyan-500 text-white p-3.5 rounded-xl font-bold hover:shadow-lg hover:from-blue-700 hover:to-cyan-600 transition-all transform active:scale-[0.98] flex items-center justify-center gap-2 mt-2">
+                            <span>เข้าสู่ระบบจองรถ</span>
+                            <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                        </button>
+                    </form>
+
+                    <div class="mt-8 text-center border-t pt-4">
+                        <p class="text-[10px] text-gray-400">© 2024 Vana Nava Corporate Transport System</p>
+                    </div>
+                </div>
+            </div>`;
             
             document.getElementById('loginForm').addEventListener('submit', async (e) => {
                 e.preventDefault();
-                const data = Object.fromEntries(new FormData(e.target));
+                const btn = e.target.querySelector('button');
+                const originalText = btn.innerHTML;
+                btn.disabled = true;
+                btn.innerHTML = `<span class="animate-spin mr-2"><i data-lucide="loader-2"></i></span> กำลังตรวจสอบ...`;
+                lucide.createIcons();
+
                 try {
-                    const res = await api.login(data);
+                    const res = await api.login(Object.fromEntries(new FormData(e.target)));
+                    localStorage.setItem('authToken', res.data.token); 
+                    localStorage.setItem('carBookingUser', JSON.stringify(res.data.user));
+                    state.currentUser = res.data.user;
                     
-                    const { token, user } = res.data;
-                    const userData = {
-                        name: user.firstName ? `${user.firstName} ${user.lastName}` : user.username,
-                        username: user.username, role: user.role, id: user._id, mustChangePassword: user.mustChangePassword
-                    };
+                    const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 1500, timerProgressBar: true });
+                    Toast.fire({ icon: 'success', title: `ยินดีต้อนรับคุณ ${res.data.user.firstName}` });
                     
-                    localStorage.setItem('authToken', token);
-                    localStorage.setItem('carBookingUser', JSON.stringify(userData));
-                    
-                    state.currentUser = userData;
-                    state.viewMode = 'dashboard';
-                    Swal.fire({ icon: 'success', title: `ยินดีต้อนรับ ${userData.name}`, timer: 1000, showConfirmButton: false });
-                    if(user.mustChangePassword) setTimeout(() => openModal('changePwdModal', true), 500);
-                    else setTimeout(() => { api.fetchData(); }, 500);
-                } catch (err) { Swal.fire({ icon: 'error', title: 'Login Failed', text: err.response?.data?.message || 'เชื่อมต่อไม่ได้' }); }
+                    if(res.data.user.mustChangePassword) setTimeout(() => openModal('changePwdModal'), 800);
+                    else setTimeout(() => api.fetchData(), 800);
+                } catch (err) { 
+                    Swal.fire({ icon: 'error', title: 'เข้าสู่ระบบไม่สำเร็จ', text: err.response?.data?.message || 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' });
+                    btn.disabled = false;
+                    btn.innerHTML = originalText;
+                    lucide.createIcons();
+                }
             });
+            lucide.createIcons();
         }
 
-        function renderNavbar(container) {
-            const nav = document.createElement('nav');
-            nav.className = "bg-white shadow-sm border-b px-6 py-4 flex flex-col md:flex-row justify-between items-center sticky top-0 z-20 gap-4 md:gap-0";
-            nav.innerHTML = `
-                <div class="flex items-center gap-3 font-bold text-xl text-gray-800"><i data-lucide="car" class="text-blue-600"></i> <span>${state.currentUser.role === 'admin' ? 'Admin Panel' : 'User Dashboard'}</span></div>
-                <div class="flex items-center gap-3">
-                    <button onclick="openLineQR()" class="bg-[#06C755] text-white hover:bg-[#05b34c] px-3 py-2 rounded-full flex items-center gap-2 text-xs font-bold transition shadow-sm" title="กดเพื่อเชื่อมต่อ LINE Bot">
-                        <i data-lucide="bell" class="w-4 h-4"></i> <span>เชื่อมต่อ LINE รับแจ้งเตือน</span>
+        function renderNavbar(c) {
+            c.innerHTML += `
+            <nav class="bg-white shadow-sm px-6 py-3 flex flex-col md:flex-row justify-between items-center sticky top-0 z-40 border-b border-gray-100">
+                <div class="flex items-center gap-3 font-bold text-lg text-gray-800">
+                    <div class="bg-gradient-to-tr from-blue-600 to-cyan-500 text-white p-2 rounded-lg shadow-sm"><i data-lucide="bus" class="w-5 h-5"></i></div> 
+                    <span>${state.currentUser.role==='admin'?'Admin Panel (Vana Nava)':'Booking Portal'}</span>
+                </div>
+                <div class="flex items-center gap-4 mt-2 md:mt-0">
+                    <button onclick="openLineQR()" class="bg-[#06C755] hover:bg-[#05b34c] text-white px-4 py-1.5 rounded-full text-xs font-bold flex items-center gap-2 shadow-sm transition-all transform hover:scale-105">
+                        <i data-lucide="bell" class="w-4 h-4"></i> รับแจ้งเตือน LINE
                     </button>
-                    
-                    <div class="flex items-center gap-2 bg-gray-100 rounded-full pl-3 pr-1 py-1 border">
-                        <i data-lucide="user" class="w-4 h-4 text-gray-500"></i>
-                        <span class="text-sm font-medium text-gray-700 mr-2">${state.currentUser.name}</span>
-                        
-                        <button onclick="openModal('changePwdModal')" class="bg-white text-gray-500 hover:text-blue-600 hover:bg-blue-50 p-1.5 rounded-full transition shadow-sm" title="เปลี่ยนรหัสผ่าน">
-                            <i data-lucide="key" class="w-4 h-4"></i>
-                        </button>
+                    <div class="h-6 w-px bg-gray-200"></div>
+                    <div class="flex items-center gap-3">
+                        <div class="text-right hidden md:block">
+                            <div class="text-sm font-bold text-gray-800">${state.currentUser.firstName} ${state.currentUser.lastName}</div>
+                            <div class="text-[10px] text-gray-500 uppercase tracking-wider">${state.currentUser.department}</div>
+                        </div>
+                        <button onclick="openModal('changePwdModal')" class="p-2 hover:bg-gray-100 rounded-full text-gray-500 transition" title="เปลี่ยนรหัสผ่าน"><i data-lucide="key" class="w-5 h-5"></i></button>
+                        <button onclick="logout()" class="p-2 hover:bg-red-50 text-red-500 rounded-full transition" title="ออกจากระบบ"><i data-lucide="log-out" class="w-5 h-5"></i></button>
                     </div>
-
-                    <button onclick="logout()" class="text-red-500 hover:bg-red-50 p-2 rounded-full transition" title="ออกจากระบบ"><i data-lucide="log-out" class="w-5 h-5"></i></button>
-                </div>`;
-            container.appendChild(nav);
+                </div>
+            </nav>`;
         }
 
-        function renderMainContent(container) {
-            const main = document.createElement('div');
-            main.className = "max-w-7xl mx-auto p-6 w-full fade-in";
+        function renderMainContent(c) {
+            const main = document.createElement('div'); 
+            main.className = "max-w-7xl mx-auto p-4 md:p-6 w-full fade-in pb-24";
             
-            let tabs = '';
-            const active = "bg-blue-600 text-white shadow";
-            const inactive = "bg-white text-gray-600 border";
-
-            if (state.currentUser.role === 'admin') {
-                tabs = `
-                    <button onclick="switchView('dashboard')" class="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition ${state.viewMode==='dashboard'?active:inactive}"><i data-lucide="layout-dashboard" class="w-4 h-4"></i> ภาพรวม</button>
-                    <button onclick="switchView('calendar')" class="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition ${state.viewMode==='calendar'?active:inactive}"><i data-lucide="calendar" class="w-4 h-4"></i> ปฏิทินงาน</button>
-                    <button onclick="switchView('users')" class="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition ${state.viewMode==='users'?active:inactive}"><i data-lucide="users" class="w-4 h-4"></i> ผู้ใช้งาน</button>
-                `;
-            } else {
-                tabs = `
-                    <button onclick="switchView('dashboard')" class="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition ${state.viewMode==='dashboard'?active:inactive}"><i data-lucide="layout-dashboard" class="w-4 h-4"></i> จองรถ</button>
-                    <button onclick="switchView('calendar')" class="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition ${state.viewMode==='calendar'?active:inactive}"><i data-lucide="calendar" class="w-4 h-4"></i> ปฏิทินงาน</button>
-                `;
-            }
-            main.innerHTML += `<div class="flex gap-2 mb-6 overflow-x-auto">${tabs}</div>`;
-
-            const contentDiv = document.createElement('div');
+            const tabs = state.currentUser.role === 'admin' 
+                ? [
+                    {id:'dashboard', l:'ภาพรวม & จัดการ', i:'layout-dashboard'}, 
+                    {id:'history', l:'ประวัติ & รายงาน', i:'file-text'}, 
+                    {id:'calendar', l:'ปฏิทินงาน', i:'calendar'}, 
+                    {id:'users', l:'ผู้ใช้งาน', i:'users'}
+                  ]
+                : [
+                    {id:'dashboard', l:'จองรถ', i:'plus-circle'}, 
+                    {id:'calendar', l:'ปฏิทินรถว่าง', i:'calendar'}
+                  ];
             
-            try {
-                if (state.viewMode === 'dashboard') {
-                    if (state.currentUser.role === 'admin') renderAdminDashboard(contentDiv);
-                    else renderUserDashboard(contentDiv);
-                } else if (state.viewMode === 'calendar') {
-                    renderCalendar(contentDiv);
-                } else if (state.viewMode === 'users') {
-                    renderUserManagement(contentDiv);
-                }
-            } catch (e) {
-                console.error("Content Render Error:", e);
-                contentDiv.innerHTML = `<div class="bg-red-50 border border-red-200 text-red-600 p-4 rounded text-center">เกิดข้อผิดพลาด: ${e.message}</div>`;
-            }
+            main.innerHTML += `
+            <div class="flex gap-2 mb-6 overflow-x-auto pb-1 scrollbar-hide">
+                ${tabs.map(t => `
+                    <button onclick="state.viewMode='${t.id}';renderApp()" 
+                        class="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 whitespace-nowrap ${state.viewMode===t.id ? 'bg-blue-600 text-white shadow-md transform scale-105' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 hover:border-gray-300'}">
+                        <i data-lucide="${t.i}" class="w-4 h-4"></i> ${t.l}
+                    </button>
+                `).join('')}
+            </div>`;
+            
+            const content = document.createElement('div');
+            if(state.viewMode==='dashboard') state.currentUser.role==='admin'?renderAdminDashboard(content):renderUserDashboard(content);
+            else if(state.viewMode==='history') renderHistoryView(content);
+            else if(state.viewMode==='calendar') renderCalendar(content);
+            else if(state.viewMode==='users') renderUserManagement(content);
+            main.appendChild(content); 
+            c.appendChild(main);
 
-            main.appendChild(contentDiv);
-            container.appendChild(main);
-
-            if (state.currentUser.role === 'admin' && state.viewMode === 'dashboard') {
-                setTimeout(renderCharts, 300);
-            }
+            if(state.currentUser.role==='admin' && state.viewMode==='dashboard') setTimeout(renderCharts, 100);
         }
 
-        // --- HTML GENERATORS ---
-        function getCarOptions(selectedId) {
-            return (state.cars || []).map(c => `<option value="${c._id}" ${selectedId===c._id?'selected':''}>${c.name} (${c.plate})</option>`).join('');
-        }
-        function getDriverOptions(selectedId) {
-            return (state.drivers || []).map(d => `<option value="${d._id}" ${selectedId===d._id?'selected':''}>${d.name}</option>`).join('');
-        }
-
-        function isResourceActive(type, id) {
-            const now = dayjs();
-            const active = state.bookings.some(b => {
-                if (['approved', 'active'].includes(b.status)) {
-                    const start = dayjs(`${b.startDate}T${b.startTime}`);
-                    const end = dayjs(`${b.endDate}T${b.endTime}`);
-                    const isActiveNow = now.isAfter(start) && now.isBefore(end);
-                    if (type === 'car' && b.carId) {
-                        return (b.carId._id === id || b.carId === id) && isActiveNow;
-                    }
-                    if (type === 'driver' && b.driverId) {
-                        return (b.driverId._id === id || b.driverId === id) && isActiveNow;
-                    }
-                }
-                return false;
-            });
-            return active;
-        }
-
-        function renderAdminDashboard(container) {
+        // --- DASHBOARDS (Admin/User) Functions ... (Same as provided before) ---
+        function renderAdminDashboard(c) {
+            const pending = state.bookings.filter(b => b.status === 'pending');
+            // 🔥 Approved but not yet done/cancelled
+            const approved = state.bookings.filter(b => b.status === 'approved'); 
+            
+            // Stats logic
             const today = dayjs();
-            const todayBookings = state.bookings.filter(b => {
-                const start = dayjs(b.startDate);
-                const end = dayjs(b.endDate);
-                return today.isBetween(start, end, 'day', '[]') && ['approved', 'active', 'completed'].includes(b.status);
-            });
+            const todayJobs = state.bookings.filter(b => dayjs(b.startDate).isSame(today, 'day') && !['cancelled', 'rejected'].includes(b.status)).length;
+            const activeCars = new Set(state.bookings.filter(b => b.status === 'active' && b.carId).map(b => b.carId._id || b.carId)).size;
+            const activeDrivers = new Set(state.bookings.filter(b => b.status === 'active' && b.driverId).map(b => b.driverId._id || b.driverId)).size;
 
-            const carsInUseCount = new Set(todayBookings.filter(b=>b.carId).map(b => b.carId._id || b.carId)).size;
-            const driversInUseCount = new Set(todayBookings.filter(b=>b.driverId).map(b => b.driverId._id || b.driverId)).size;
-
-            const bookingsList = state.bookings || [];
-            const pending = bookingsList.filter(b => b.status === 'pending');
-            
-            const pendingHtml = pending.length === 0 ? 
-                '<div class="text-center text-gray-400 py-8 bg-gray-50 rounded-lg border border-dashed">ไม่มีรายการรออนุมัติ</div>' : 
-                pending.map(b => `
-                <div class="border p-4 rounded-xl bg-white flex flex-col md:flex-row justify-between items-start gap-4 mb-3 shadow-sm">
-                    <div>
-                        <h4 class="font-bold text-gray-800">${b.remarks || '-'}</h4>
-                        <p class="text-sm text-gray-500 mt-1">📅 ${b.startDate} ${b.startTime} - ${b.endDate} ${b.endTime}</p>
-                        <div class="mt-2"><span class="text-xs bg-gray-100 px-2 py-1 rounded">User: ${b.userId}</span></div>
+            c.innerHTML = `
+            <div class="space-y-6">
+                <!-- Summary Cards -->
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-l-4 border-l-blue-500">
+                        <div class="text-sm text-gray-500 font-medium">งานวันนี้</div>
+                        <div class="text-3xl font-bold text-gray-800 mt-1">${todayJobs}</div>
                     </div>
-                    <div class="flex flex-col gap-2 w-full md:w-auto text-right">
-                        <div class="flex gap-2">
-                            <select id="c-${b._id}" class="border p-2 rounded text-sm w-full bg-gray-50"><option value="">เลือกรถ</option>${getCarOptions()}</select>
-                            <select id="d-${b._id}" class="border p-2 rounded text-sm w-full bg-gray-50"><option value="">คนขับ</option>${getDriverOptions()}</select>
-                        </div>
-                        <div class="flex gap-2 justify-end">
-                            <button onclick="openModal('rejectModal', false, {id:'${b._id}'})" class="bg-red-50 text-red-600 px-4 py-2 rounded-lg text-sm font-bold hover:bg-red-100">ไม่อนุมัติ</button>
-                            <button onclick="approveBooking('${b._id}')" class="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-bold shadow hover:bg-blue-700">อนุมัติ</button>
-                        </div>
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-l-4 border-l-green-500">
+                        <div class="text-sm text-gray-500 font-medium">รถกำลังวิ่ง</div>
+                        <div class="text-3xl font-bold text-gray-800 mt-1">${activeCars} <span class="text-xs font-normal text-gray-400">คัน</span></div>
+                    </div>
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-l-4 border-l-purple-500">
+                        <div class="text-sm text-gray-500 font-medium">คนขับปฏิบัติงาน</div>
+                        <div class="text-3xl font-bold text-gray-800 mt-1">${activeDrivers} <span class="text-xs font-normal text-gray-400">คน</span></div>
+                    </div>
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-l-4 border-l-yellow-500">
+                        <div class="text-sm text-gray-500 font-medium">รออนุมัติ</div>
+                        <div class="text-3xl font-bold text-yellow-600 mt-1">${pending.length}</div>
                     </div>
                 </div>
-            `).join('');
 
-            const carsHtml = (state.cars || []).map(i => {
-                const isActive = isResourceActive('car', i._id);
-                return `
-                <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg border mb-2">
-                    <div class="flex items-center gap-3">
-                        <span class="w-3 h-3 rounded-full ${isActive ? 'bg-red-500' : 'bg-green-500'}" title="${isActive ? 'กำลังใช้งาน' : 'ว่าง'}"></span>
-                        <div><p class="font-bold text-sm">${i.name}</p><p class="text-xs text-gray-500">${i.plate}</p></div>
+                <!-- Charts Area -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border h-80 flex flex-col">
+                        <h4 class="font-bold text-gray-700 mb-4 text-sm flex items-center gap-2"><i data-lucide="bar-chart-2" class="w-4 h-4 text-blue-500"></i> สถิติการใช้รถ (ครั้ง)</h4>
+                        <div class="relative flex-1"><canvas id="carChart"></canvas></div>
                     </div>
-                    <div class="flex gap-1">
-                        <button onclick="openHistoryModal('car', '${i._id}', '${i.name}')" class="text-blue-500 bg-blue-50 p-1.5 rounded hover:bg-blue-100" title="ดูประวัติการใช้"><i data-lucide="history" class="w-4 h-4"></i></button>
-                        <button onclick="openBlockModal('car','${i._id}','${i.name}')" class="text-orange-400 p-1.5 hover:bg-orange-100 rounded" title="แจ้งซ่อม"><i data-lucide="calendar-off" class="w-4 h-4"></i></button>
-                        <button onclick="deleteResource('cars','${i._id}')" class="text-gray-400 hover:text-red-500 p-1.5"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border h-80 flex flex-col">
+                        <h4 class="font-bold text-gray-700 mb-4 text-sm flex items-center gap-2"><i data-lucide="users" class="w-4 h-4 text-green-500"></i> งานคนขับ (ครั้ง)</h4>
+                        <div class="relative flex-1"><canvas id="driverChart"></canvas></div>
                     </div>
-                </div>`;
-            }).join('');
-
-            const driversHtml = (state.drivers || []).map(i => {
-                const isActive = isResourceActive('driver', i._id);
-                return `
-                <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg border mb-2">
-                    <div class="flex items-center gap-3">
-                        <span class="w-3 h-3 rounded-full ${isActive ? 'bg-red-500' : 'bg-green-500'}" title="${isActive ? 'กำลังทำงาน' : 'ว่าง'}"></span>
-                        <div><p class="font-bold text-sm">${i.name}</p><p class="text-xs text-gray-500">${i.phone}</p></div>
-                    </div>
-                    <div class="flex gap-1">
-                        <button onclick="openHistoryModal('driver', '${i._id}', '${i.name}')" class="text-blue-500 bg-blue-50 p-1.5 rounded hover:bg-blue-100" title="ดูประวัติงาน"><i data-lucide="history" class="w-4 h-4"></i></button>
-                        <button onclick="openBlockModal('driver','${i._id}','${i.name}')" class="text-orange-400 p-1.5 hover:bg-orange-100 rounded" title="ลา"><i data-lucide="calendar-off" class="w-4 h-4"></i></button>
-                        <button onclick="deleteResource('drivers','${i._id}')" class="text-gray-400 hover:text-red-500 p-1.5"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
-                    </div>
-                </div>`;
-            }).join('');
-
-            container.innerHTML = `
-                <div class="space-y-6">
-                    <div class="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-xl p-6 text-white shadow-lg flex flex-col md:flex-row justify-between items-center gap-6 relative overflow-hidden">
-                        <div class="absolute right-0 top-0 opacity-10 p-4"><i data-lucide="activity" class="w-48 h-48"></i></div>
-                        <div class="flex items-center gap-4 relative z-10">
-                            <div class="bg-white/20 p-3 rounded-full"><i data-lucide="calendar-check" class="w-8 h-8"></i></div>
-                            <div>
-                                <h3 class="font-bold text-lg">สรุปงานวันนี้ (${today.format('DD/MM/YYYY')})</h3>
-                                <p class="text-blue-100 text-sm">ภาพรวมการใช้งานทรัพยากร</p>
-                            </div>
-                        </div>
-                        <div class="flex gap-8 text-center relative z-10">
-                            <div>
-                                <div class="text-3xl font-bold">${todayBookings.length}</div>
-                                <div class="text-xs text-blue-200 uppercase">งานทั้งหมด</div>
-                            </div>
-                            <div class="w-px bg-white/20"></div>
-                            <div>
-                                <div class="text-3xl font-bold text-green-300">${carsInUseCount}</div>
-                                <div class="text-xs text-blue-200 uppercase">รถที่ใช้</div>
-                            </div>
-                            <div class="w-px bg-white/20"></div>
-                            <div>
-                                <div class="text-3xl font-bold text-yellow-300">${driversInUseCount}</div>
-                                <div class="text-xs text-blue-200 uppercase">คนขับที่ทำงาน</div>
-                            </div>
-                        </div>
-                        <!-- NEW: Export Button -->
-                        <button onclick="exportToCSV()" class="absolute top-4 right-4 bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-1.5 rounded flex items-center gap-2 border border-white/20 transition z-10">
-                            <i data-lucide="download" class="w-4 h-4"></i> Export CSV
-                        </button>
-                    </div>
-
-                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        <div class="bg-white p-6 rounded-xl shadow-sm border h-80"><h3 class="font-bold mb-4 text-gray-700 flex items-center gap-2"><i data-lucide="bar-chart"></i> การใช้รถ</h3><div class="h-64 relative"><canvas id="carChart"></canvas></div></div>
-                        <div class="bg-white p-6 rounded-xl shadow-sm border h-80"><h3 class="font-bold mb-4 text-gray-700 flex items-center gap-2"><i data-lucide="users"></i> คนขับ</h3><div class="h-64 relative"><canvas id="driverChart"></canvas></div></div>
-                        <div class="bg-white p-6 rounded-xl shadow-sm border h-80"><h3 class="font-bold mb-4 text-gray-700 flex items-center gap-2"><i data-lucide="pie-chart"></i> แผนก</h3><div class="h-64 relative flex justify-center"><canvas id="deptChart"></canvas></div></div>
-                    </div>
-
-                    <div class="bg-white p-6 rounded-xl shadow-sm border">
-                        <h3 class="font-bold mb-4 text-lg flex items-center gap-2 text-blue-600"><i data-lucide="clock"></i> รายการรออนุมัติ (${pending.length})</h3>
-                        <div>${pendingHtml}</div>
-                    </div>
-                    
-                     <div class="grid md:grid-cols-2 gap-6">
-                        <div class="bg-white p-6 rounded-xl shadow-sm border"><h3 class="font-bold mb-4">จัดการรถ</h3><form onsubmit="addResource(event, 'cars')" class="flex gap-2 mb-4"><input name="name" placeholder="ชื่อ" class="border p-2 rounded text-sm flex-1" required><input name="plate" placeholder="ทะเบียน" class="border p-2 rounded text-sm w-28" required><button class="bg-blue-600 text-white p-2 rounded"><i data-lucide="plus" class="w-4 h-4"></i></button></form><div class="space-y-2 max-h-60 overflow-y-auto custom-scrollbar">${carsHtml}</div></div>
-                        <div class="bg-white p-6 rounded-xl shadow-sm border"><h3 class="font-bold mb-4">จัดการคนขับ</h3><form onsubmit="addResource(event, 'drivers')" class="flex gap-2 mb-4"><input name="name" placeholder="ชื่อ" class="border p-2 rounded text-sm flex-1" required><input name="phone" placeholder="เบอร์" class="border p-2 rounded text-sm w-28" required><button class="bg-green-600 text-white p-2 rounded"><i data-lucide="plus" class="w-4 h-4"></i></button></form><div class="space-y-2 max-h-60 overflow-y-auto custom-scrollbar">${driversHtml}</div></div>
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border h-80 flex flex-col">
+                        <h4 class="font-bold text-gray-700 mb-4 text-sm flex items-center gap-2"><i data-lucide="pie-chart" class="w-4 h-4 text-purple-500"></i> สัดส่วนแผนก</h4>
+                        <div class="relative flex-1"><canvas id="deptChart"></canvas></div>
                     </div>
                 </div>
-            `;
-        }
 
-        // --- NEW: Export CSV Function ---
-        function exportToCSV() {
-            const bookings = state.bookings;
-            if (bookings.length === 0) {
-                Swal.fire('ไม่มีข้อมูล', 'ยังไม่มีรายการจองในระบบ', 'info');
-                return;
-            }
-
-            // CSV Header
-            let csvContent = "\uFEFF"; // BOM for Thai support
-            csvContent += "Date,Time,User,Car,Driver,Status,StartOdo,EndOdo,FuelCost,TollCost\n";
-
-            bookings.forEach(b => {
-                const user = state.users.find(u => u.username === b.userId);
-                const car = state.cars.find(c => c._id === b.carId);
-                const driver = state.drivers.find(d => d._id === b.driverId);
-                
-                const row = [
-                    `${b.startDate}`,
-                    `${b.startTime}-${b.endTime}`,
-                    `"${user ? user.firstName + ' ' + user.lastName : b.userId}"`,
-                    `"${car ? car.name : '-'}"`,
-                    `"${driver ? driver.name : '-'}"`,
-                    `"${b.status}"`,
-                    b.startOdometer || 0,
-                    b.endOdometer || 0,
-                    b.fuelCost || 0,
-                    b.tollCost || 0
-                ].join(",");
-                csvContent += row + "\n";
-            });
-
-            const encodedUri = encodeURI("data:text/csv;charset=utf-8," + csvContent);
-            const link = document.createElement("a");
-            link.setAttribute("href", encodedUri);
-            link.setAttribute("download", `booking_report_${dayjs().format('YYYY-MM-DD')}.csv`);
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        }
-
-        function renderCharts() {
-            if (!state.stats) return;
-            const createChart = (id, type, labels, data, colors) => {
-                const ctx = document.getElementById(id);
-                if (!ctx) return;
-                const existingChart = Chart.getChart(ctx);
-                if (existingChart) existingChart.destroy();
-                new Chart(ctx, { type: type, data: { labels: labels, datasets: [{ label: 'Data', data: data, backgroundColor: colors, borderWidth: 1 }] }, options: { responsive: true, maintainAspectRatio: false, indexAxis: type === 'bar' && id === 'driverChart' ? 'y' : 'x', plugins: { legend: { display: type === 'doughnut' } } } });
-            };
-            try {
-                createChart('carChart', 'bar', (state.stats.carStats||[]).map(x=>x.name), (state.stats.carStats||[]).map(x=>x.count), '#3b82f6');
-                createChart('driverChart', 'bar', (state.stats.driverStats||[]).map(x=>x.name), (state.stats.driverStats||[]).map(x=>x.count), '#10b981');
-                createChart('deptChart', 'doughnut', (state.stats.deptStats||[]).map(x=>x.name), (state.stats.deptStats||[]).map(x=>x.count), ['#FF6384','#36A2EB','#FFCE56','#4BC0C0']);
-            } catch (e) { console.error("Chart Error:", e); }
-        }
-
-        function renderUserManagement(container) {
-            const userList = Array.isArray(state.users) ? state.users : [];
-            const rows = userList.map(u => `
-                <tr class="border-b hover:bg-gray-50 ${!u.isActive ? 'opacity-60 bg-gray-100' : ''}">
-                    <td class="p-3 font-medium">${u.username}</td>
-                    <td class="p-3">${u.firstName} ${u.lastName}</td>
-                    <td class="p-3"><span class="bg-blue-50 text-blue-600 px-2 py-0.5 rounded text-xs font-bold">${u.department || '-'}</span></td>
-                    <td class="p-3">${u.lineUserId ? '<span class="text-green-600 flex items-center gap-1"><i data-lucide="check-circle" class="w-3 h-3"></i> Linked</span>' : '<span class="text-gray-400 text-xs">Unlinked</span>'}</td>
-                    <td class="p-3 text-right flex justify-end gap-2">
-                        <button onclick="openEditUserModal('${u._id}')" class="text-blue-500 bg-blue-50 p-1.5 rounded hover:bg-blue-100" title="แก้ไข"><i data-lucide="edit" class="w-4 h-4"></i></button>
-                        <button onclick="openResetPwdModal('${u._id}', '${u.username}')" class="text-orange-500 bg-orange-50 p-1.5 rounded hover:bg-orange-100" title="รีเซ็ต"><i data-lucide="key" class="w-4 h-4"></i></button>
-                        <button onclick="toggleUser('${u._id}', ${u.isActive})" class="text-xs border px-2 py-1 rounded ${u.isActive?'border-green-200 text-green-600':'border-red-200 text-red-600'}">${u.isActive?'Active':'Inactive'}</button>
-                        ${u.lineUserId ? `<button onclick="unlinkLine('${u._id}')" class="text-gray-500 bg-gray-100 p-1.5 rounded hover:bg-gray-200" title="ปลด LINE"><i data-lucide="qr-code" class="w-4 h-4"></i></button>` : ''}
-                        <button onclick="deleteUser('${u._id}')" class="text-red-500 bg-red-50 p-1.5 rounded hover:bg-red-100"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
-                    </td>
-                </tr>
-            `).join('');
-
-            container.innerHTML = `
-                <div class="bg-white p-6 rounded-xl shadow-sm border">
-                    <h3 class="font-bold mb-4 flex items-center gap-2"><i data-lucide="users"></i> จัดการผู้ใช้งาน</h3>
-                    <form onsubmit="addUser(event)" class="grid grid-cols-1 md:grid-cols-6 gap-2 mb-6 bg-gray-50 p-4 rounded-lg border">
-                        <input name="username" placeholder="รหัสพนักงาน" class="border p-2 rounded text-sm" required>
-                        <input name="password" type="password" placeholder="รหัสผ่าน" class="border p-2 rounded text-sm" required>
-                        <input name="firstName" placeholder="ชื่อ" class="border p-2 rounded text-sm" required>
-                        <input name="lastName" placeholder="นามสกุล" class="border p-2 rounded text-sm" required>
-                        <input name="email" placeholder="อีเมล" class="border p-2 rounded text-sm" required>
-                        <input name="department" placeholder="แผนก" class="border p-2 rounded text-sm" required>
-                        <button class="bg-green-600 text-white px-4 rounded text-sm font-bold md:col-span-6 mt-2">เพิ่มพนักงาน</button>
-                    </form>
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-sm text-left">
-                            <thead class="bg-gray-100 text-gray-600 uppercase text-xs"><tr><th class="p-3">รหัส</th><th class="p-3">ชื่อ-นามสกุล</th><th class="p-3">แผนก</th><th class="p-3">LINE</th><th class="p-3">ใช้งาน</th><th class="p-3 text-right">จัดการ</th></tr></thead>
-                            <tbody>${rows}</tbody>
-                        </table>
-                    </div>
-                </div>`;
-        }
-
-        function renderUserDashboard(container) {
-            const myBookings = state.bookings.filter(b => b.userId === state.currentUser.username);
-            const now = dayjs(); 
-
-            const listHtml = myBookings.map(b => {
-                let startBtn = '';
-                // Logic to show "Extension" button if approved/active
-                const showExtend = ['approved', 'active'].includes(b.status);
-
-                if(b.status === 'approved') {
-                    const bookingStart = dayjs(`${b.startDate} ${b.startTime}`);
-                    if (now.isBefore(bookingStart)) {
-                        startBtn = `<button disabled class="bg-gray-300 text-gray-500 px-3 py-1 rounded text-xs cursor-not-allowed border" title="เริ่มได้เมื่อถึงเวลา ${b.startTime}">รอเวลา ${b.startTime}</button>`;
-                    } else {
-                        startBtn = `<button onclick="startTrip('${b._id}', '${b.startDate}', '${b.startTime}')" class="bg-green-600 text-white px-3 py-1 rounded text-xs hover:bg-green-700 shadow-sm transition">เริ่มงาน</button>`;
-                    }
-                }
-
-                let odometerHtml = '';
-                if(b.startOdometer) {
-                    odometerHtml = `
-                    <div class="mt-2 text-xs bg-gray-50 p-2 rounded border space-y-1">
-                        <div class="flex justify-between items-center"><span class="text-gray-500">ไมล์เริ่มต้น:</span> <span class="font-bold">${b.startOdometer}</span></div>
-                        ${b.endOdometer ? `
-                            <div class="flex justify-between items-center"><span class="text-gray-500">ไมล์สิ้นสุด:</span> <span class="font-bold">${b.endOdometer}</span></div>
-                            <div class="flex justify-between items-center text-green-600 pt-1 border-t"><span class="font-bold">ระยะทางรวม:</span> <span class="font-bold">${b.endOdometer - b.startOdometer} กม.</span></div>
-                            <div class="flex justify-between items-center text-gray-500 pt-1 border-t mt-1"><span>ค่าน้ำมัน: ${b.fuelCost}</span> <span>ทางด่วน: ${b.tollCost}</span></div>
-                        ` : '<div class="text-orange-500 text-[10px]">* กำลังเดินทาง</div>'}
-                    </div>`;
-                }
-
-                return `
-                <div class="border p-4 rounded-xl bg-white flex justify-between items-start shadow-sm mb-2">
-                    <div>
-                        <div class="mb-2"><span class="px-2 py-1 rounded text-xs font-bold bg-gray-100">${b.status.toUpperCase()}</span></div>
-                        <p class="font-bold text-gray-800">${b.remarks}</p>
-                        <p class="text-xs text-gray-500 mt-1">${b.startDate} ${b.startTime} - ${b.endDate} ${b.endTime}</p>
-                        ${odometerHtml}
-                    </div>
-                    <div class="flex flex-col gap-2 text-right">
-                        ${startBtn}
-                        ${b.status === 'active' ? `<button onclick="endTrip('${b._id}', ${b.startOdometer})" class="bg-gray-800 text-white px-3 py-1 rounded text-xs">คืนรถ</button>` : ''}
-                        ${showExtend ? `<button onclick="openExtendModal('${b._id}', '${b.endDate}', '${b.endTime}')" class="text-blue-600 text-xs border border-blue-200 px-2 py-1 rounded hover:bg-blue-50">ขอต่อเวลา</button>` : ''}
-                        ${['pending','approved'].includes(b.status) ? `<button onclick="cancelBooking('${b._id}')" class="text-red-500 text-xs underline">ยกเลิก</button>` : ''}
-                    </div>
-                </div>`;
-            }).join('');
-
-            const today = new Date().toISOString().split('T')[0];
-
-            container.innerHTML = `
-                <div class="grid md:grid-cols-12 gap-8">
-                    <div class="md:col-span-4 bg-white p-6 rounded-2xl shadow-sm border h-fit sticky top-24">
-                        <h2 class="text-lg font-bold mb-6 flex items-center gap-2 text-gray-800"><i data-lucide="plus" class="bg-blue-100 text-blue-600 rounded p-1"></i> จองรถใหม่</h2>
-                        <form id="bookingForm" onsubmit="submitBooking(event)" class="space-y-4">
-                            <div class="grid grid-cols-2 gap-2">
-                                <div><label class="text-xs">เริ่ม</label><input type="date" name="startDate" id="startDate" min="${today}" class="w-full border p-2 rounded text-sm" required onchange="checkBookingAvailability()"></div>
-                                <div><label class="text-xs">เวลา</label><input type="time" name="startTime" id="startTime" class="w-full border p-2 rounded text-sm" required onchange="checkBookingAvailability()"></div>
-                            </div>
-                            <div class="grid grid-cols-2 gap-2">
-                                <div><label class="text-xs">คืน</label><input type="date" name="endDate" id="endDate" min="${today}" class="w-full border p-2 rounded text-sm" required onchange="checkBookingAvailability()"></div>
-                                <div><label class="text-xs">เวลา</label><input type="time" name="endTime" id="endTime" class="w-full border p-2 rounded text-sm" required onchange="checkBookingAvailability()"></div>
-                            </div>
-                             <div class="flex items-center gap-2"><input type="checkbox" name="useDriver"> <label class="text-sm">ต้องการคนขับ</label></div>
-                            <textarea name="remarks" class="w-full border p-2 rounded text-sm" rows="3" placeholder="รายละเอียด" required></textarea>
-                            <div id="availability-result" class="text-xs p-2 rounded bg-gray-50 border hidden"></div>
-                            <button id="submitBtn" class="w-full bg-blue-600 text-white p-3 rounded-xl font-bold">ยืนยัน</button>
-                        </form>
-                    </div>
-                    <div class="md:col-span-8">
+                <!-- Main Operations -->
+                <div class="grid lg:grid-cols-3 gap-6">
+                    <!-- Left: Approvals -->
+                    <div class="lg:col-span-2 space-y-6">
+                        <!-- Pending List -->
                         <div class="bg-white p-6 rounded-2xl shadow-sm border">
-                            <h3 class="font-bold mb-4"><i data-lucide="list"></i> ประวัติการจอง</h3>
-                            ${listHtml || '<p class="text-gray-400 text-center">ยังไม่มีรายการ</p>'}
+                            <h3 class="font-bold mb-4 flex items-center gap-2 text-blue-600"><i data-lucide="clock"></i> รายการรออนุมัติ (${pending.length})</h3>
+                            ${pending.length===0 
+                                ? '<div class="text-center text-gray-400 py-12 border-2 border-dashed border-gray-100 rounded-xl bg-gray-50 flex flex-col items-center gap-2"><i data-lucide="inbox" class="w-10 h-10 opacity-20"></i> ไม่มีรายการใหม่</div>' 
+                                : `<div class="space-y-3">
+                                    ${pending.map(b => `
+                                        <div class="border border-gray-200 p-5 rounded-xl bg-white shadow-sm hover:shadow-md transition relative overflow-hidden group">
+                                            <div class="absolute left-0 top-0 bottom-0 w-1 bg-yellow-400 group-hover:w-2 transition-all"></div>
+                                            <div class="flex flex-col md:flex-row justify-between gap-4">
+                                                <div class="flex-1">
+                                                    <div class="font-bold text-gray-800 text-lg mb-1">${b.remarks}</div>
+                                                    <div class="text-sm text-gray-500 flex items-center gap-2">
+                                                        <i data-lucide="calendar" class="w-4 h-4 text-blue-500"></i> 
+                                                        ${dayjs(b.startDate).format('DD/MM/YY')} ${b.startTime} - ${dayjs(b.endDate).format('DD/MM/YY')} ${b.endTime}
+                                                    </div>
+                                                    <div class="mt-2 inline-flex items-center gap-1 bg-gray-100 px-2 py-1 rounded text-xs text-gray-600 font-medium">
+                                                        <i data-lucide="user" class="w-3 h-3"></i> จองโดย: ${b.userId}
+                                                    </div>
+                                                </div>
+                                                <div class="flex flex-col gap-2 min-w-[220px]">
+                                                    <select id="c-${b._id}" class="border border-gray-300 p-2 rounded-lg text-sm bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer">
+                                                        <option value="">🚘 เลือกรถ...</option>
+                                                        ${state.cars.map(c=>`<option value="${c._id}">${c.name} (${c.plate})</option>`).join('')}
+                                                    </select>
+                                                    <select id="d-${b._id}" class="border border-gray-300 p-2 rounded-lg text-sm bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer">
+                                                        <option value="">👨‍✈️ เลือกคนขับ...</option>
+                                                        ${state.drivers.map(d=>`<option value="${d._id}">${d.name}</option>`).join('')}
+                                                    </select>
+                                                    <div class="flex gap-2 mt-1">
+                                                        <button onclick="approveBooking('${b._id}')" class="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-bold shadow-sm hover:bg-blue-700 transition">อนุมัติ</button>
+                                                        <button onclick="rejectBooking('${b._id}')" class="flex-1 bg-white border border-red-200 text-red-500 py-2 rounded-lg text-sm font-bold hover:bg-red-50 transition">ปฏิเสธ</button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    `).join('')}
+                                  </div>`
+                            }
+                        </div>
+
+                        <!-- 🔥 Approved List (Editable) -->
+                        <div class="bg-white p-6 rounded-xl shadow-sm border">
+                            <h3 class="font-bold mb-4 flex items-center gap-2 text-green-600"><i data-lucide="check-circle"></i> อนุมัติแล้ว / รอเดินทาง (${approved.length})</h3>
+                            ${approved.length===0 
+                                ? '<div class="text-center text-gray-400 py-8 border-2 border-dashed border-gray-100 rounded-xl bg-gray-50">ไม่มีรายการ</div>' 
+                                : `<div class="space-y-3">
+                                    ${approved.map(b => `
+                                        <div class="border p-4 rounded-xl mb-3 shadow-sm flex justify-between items-center bg-green-50/50 hover:bg-green-50 transition">
+                                            <div>
+                                                <div class="font-bold text-gray-800">${b.remarks}</div>
+                                                <div class="text-xs text-gray-500 flex items-center gap-1 mt-1">
+                                                    📅 ${dayjs(b.startDate).format('DD/MM/YY')} ${b.startTime} 
+                                                    <span class="text-gray-300">|</span> 
+                                                    🚘 ${b.carId?.name||'-'} 
+                                                    <span class="text-gray-300">|</span> 
+                                                    👨‍✈️ ${b.driverId?.name||'-'}
+                                                </div>
+                                            </div>
+                                            <button onclick="openEditBookingModal('${b._id}')" class="text-blue-600 bg-white border border-blue-200 px-3 py-2 rounded-lg hover:bg-blue-50 text-xs font-bold flex items-center gap-1 transition shadow-sm">
+                                                <i data-lucide="edit-3" class="w-3 h-3"></i> แก้ไข
+                                            </button>
+                                        </div>
+                                    `).join('')}
+                                  </div>`
+                            }
                         </div>
                     </div>
-                </div>`;
+                    
+                    <!-- Right: Resource Management -->
+                    <div class="space-y-6">
+                        <!-- Manage Cars -->
+                        <div class="bg-white p-5 rounded-2xl shadow-sm border">
+                            <h3 class="font-bold mb-4 flex items-center gap-2 text-gray-800"><div class="bg-blue-100 p-1.5 rounded"><i data-lucide="car" class="text-blue-600 w-4 h-4"></i></div> จัดการรถ</h3>
+                            <form onsubmit="addResource(event,'cars')" class="flex gap-2 mb-4">
+                                <input name="name" placeholder="ชื่อรุ่น" class="border p-2 rounded-lg text-sm flex-1 outline-none focus:border-blue-500" required>
+                                <input name="plate" placeholder="ทะเบียน" class="border p-2 rounded-lg text-sm w-24 outline-none focus:border-blue-500" required>
+                                <button class="bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700 transition shadow-sm"><i data-lucide="plus" class="w-5 h-5"></i></button>
+                            </form>
+                            <div class="max-h-64 overflow-y-auto custom-scrollbar pr-1 space-y-2">
+                                ${state.cars.map(i=>`
+                                    <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg border border-gray-100 hover:shadow-sm transition group">
+                                        <div>
+                                            <div class="font-bold text-sm text-gray-800">${i.name}</div>
+                                            <div class="text-xs text-gray-500 flex items-center gap-1">
+                                                <span class="bg-blue-100 text-blue-700 px-1.5 rounded font-mono">${i.plate}</span> 
+                                                <span>• ${i.currentOdometer?.toLocaleString()||0} km</span>
+                                            </div>
+                                        </div>
+                                        <div class="flex gap-1 opacity-60 group-hover:opacity-100 transition">
+                                            <button onclick="openBulkMaintenanceModal('car','${i._id}','${i.name}')" class="text-orange-600 bg-white border border-orange-200 p-1.5 rounded-md hover:bg-orange-50 text-xs flex items-center gap-1 transition font-bold" title="แจ้งซ่อม">
+                                                <i data-lucide="wrench" class="w-3 h-3"></i> หยุด/ซ่อม
+                                            </button>
+                                            <button onclick="deleteResource('cars','${i._id}')" class="text-red-500 bg-white border border-red-200 p-1.5 rounded-md hover:bg-red-50 transition">
+                                                <i data-lucide="trash-2" class="w-3 h-3"></i>
+                                            </button>
+                                        </div>
+                                    </div>`).join('')}
+                            </div>
+                        </div>
+
+                        <!-- Manage Drivers -->
+                        <div class="bg-white p-5 rounded-2xl shadow-sm border">
+                            <h3 class="font-bold mb-4 flex items-center gap-2 text-gray-800"><div class="bg-green-100 p-1.5 rounded"><i data-lucide="users" class="text-green-600 w-4 h-4"></i></div> จัดการคนขับ</h3>
+                            <form onsubmit="addResource(event,'drivers')" class="flex gap-2 mb-4">
+                                <input name="name" placeholder="ชื่อ-สกุล" class="border p-2 rounded-lg text-sm flex-1 outline-none focus:border-green-500" required>
+                                <input name="phone" placeholder="เบอร์โทร" class="border p-2 rounded-lg text-sm w-28 outline-none focus:border-green-500" required>
+                                <button class="bg-green-600 text-white p-2 rounded-lg hover:bg-green-700 transition shadow-sm"><i data-lucide="plus" class="w-5 h-5"></i></button>
+                            </form>
+                            <div class="max-h-64 overflow-y-auto custom-scrollbar pr-1 space-y-2">
+                                ${state.drivers.map(i=>`
+                                    <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg border border-gray-100 hover:shadow-sm transition group">
+                                        <div>
+                                            <div class="font-bold text-sm text-gray-800">${i.name}</div>
+                                            <div class="text-xs text-gray-500 flex items-center gap-1"><i data-lucide="phone" class="w-3 h-3"></i> ${i.phone}</div>
+                                        </div>
+                                        <div class="flex gap-1 opacity-60 group-hover:opacity-100 transition">
+                                            <button onclick="openBulkMaintenanceModal('driver','${i._id}','${i.name}')" class="text-orange-600 bg-white border border-orange-200 p-1.5 rounded-md hover:bg-orange-50 text-xs flex items-center gap-1 transition font-bold" title="วันหยุด">
+                                                <i data-lucide="calendar-off" class="w-3 h-3"></i> วันหยุด
+                                            </button>
+                                            <button onclick="deleteResource('drivers','${i._id}')" class="text-red-500 bg-white border border-red-200 p-1.5 rounded-md hover:bg-red-50 transition">
+                                                <i data-lucide="trash-2" class="w-3 h-3"></i>
+                                            </button>
+                                        </div>
+                                    </div>`).join('')}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
         }
 
-        async function checkBookingAvailability() {
-            const startD = document.getElementById('startDate').value;
-            const startT = document.getElementById('startTime').value;
-            const endD = document.getElementById('endDate').value;
-            const endT = document.getElementById('endTime').value;
-            const resDiv = document.getElementById('availability-result');
-            const btn = document.getElementById('submitBtn');
-
-            if(startD && startT && endD && endT) {
-                if(startD > endD || (startD === endD && startT >= endT)) {
-                    resDiv.innerHTML = '<span class="text-red-500">❌ เวลาคืนรถต้องหลังเวลารับรถ</span>';
-                    resDiv.classList.remove('hidden');
-                    return;
-                }
-
-                try {
-                    const res = await axios.post(`${API_URL}/check-availability`, {
-                        startDate: startD, startTime: startT, endDate: endD, endTime: endT
-                    });
+        function renderUserDashboard(c) {
+            const today = new Date().toISOString().split('T')[0];
+            const myBookings = state.bookings.filter(b => b.userId === state.currentUser.username);
+            c.innerHTML = `
+            <div class="grid md:grid-cols-12 gap-8">
+                <!-- Left: Booking Form -->
+                <div class="md:col-span-5 bg-white p-6 rounded-2xl shadow-sm border h-fit sticky top-24">
+                    <div class="mb-6 pb-4 border-b border-gray-100">
+                        <h2 class="text-xl font-bold flex items-center gap-2 text-gray-800"><div class="bg-blue-100 p-2 rounded-lg text-blue-600"><i data-lucide="plus-circle" class="w-5 h-5"></i></div> จองรถใหม่</h2>
+                        <p class="text-xs text-gray-500 mt-1 pl-11">กรอกรายละเอียดเพื่อขอใช้รถ</p>
+                    </div>
                     
-                    const cars = res.data.availableCars;
-                    const drivers = res.data.availableDrivers;
-                    
-                    let html = `<div class="font-bold mb-1 text-gray-700">สถานะช่วงเวลาที่เลือก:</div>`;
-                    if(cars.length > 0) {
-                        html += `<div class="text-green-600">✅ รถว่าง ${cars.length} คัน (${cars.map(c=>c.name).join(', ')})</div>`;
-                    } else {
-                        html += `<div class="text-red-500">❌ รถเต็มทุกคัน</div>`;
-                    }
+                    <form onsubmit="submitBooking(event)" class="space-y-5">
+                        <div class="space-y-3">
+                            <div class="grid grid-cols-2 gap-3">
+                                <div><label class="text-xs font-bold text-gray-500 block mb-1">วันที่เริ่ม</label><input type="date" name="startDate" id="sd" min="${today}" class="w-full border p-2.5 rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition" required onchange="checkAvail()"></div>
+                                <div><label class="text-xs font-bold text-gray-500 block mb-1">เวลา</label><input type="time" name="startTime" id="st" class="w-full border p-2.5 rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition" required onchange="checkAvail()"></div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div><label class="text-xs font-bold text-gray-500 block mb-1">วันที่คืน</label><input type="date" name="endDate" id="ed" min="${today}" class="w-full border p-2.5 rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition" required onchange="checkAvail()"></div>
+                                <div><label class="text-xs font-bold text-gray-500 block mb-1">เวลา</label><input type="time" name="endTime" id="et" class="w-full border p-2.5 rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition" required onchange="checkAvail()"></div>
+                            </div>
+                        </div>
 
-                    if(drivers.length > 0) {
-                        html += `<div class="text-green-600">✅ คนขับว่าง ${drivers.length} คน</div>`;
-                    } else {
-                        html += `<div class="text-red-500">❌ คนขับไม่ว่าง</div>`;
-                    }
+                        <!-- Availability Badge -->
+                        <div id="avail-badge" class="hidden p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-xl text-center shadow-inner transition-all duration-300">
+                            <div class="text-xs font-bold text-blue-800 mb-2 uppercase tracking-wide">สถานะความพร้อม (ช่วงเวลานี้)</div>
+                            <div class="flex justify-center gap-8 text-sm">
+                                <div class="flex flex-col items-center">
+                                    <span class="text-2xl font-black text-blue-600" id="cc">0</span>
+                                    <span class="text-xs text-gray-600 font-medium flex items-center gap-1"><i data-lucide="car" class="w-3 h-3"></i> รถว่าง</span>
+                                </div>
+                                <div class="w-px bg-blue-200 h-8 self-center"></div>
+                                <div class="flex flex-col items-center">
+                                    <span class="text-2xl font-black text-green-600" id="dc">0</span>
+                                    <span class="text-xs text-gray-600 font-medium flex items-center gap-1"><i data-lucide="user" class="w-3 h-3"></i> คนขับ</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="flex items-center gap-3 bg-gray-50 p-3 rounded-xl border border-gray-100 hover:border-blue-200 transition cursor-pointer" onclick="document.getElementById('ud').click()">
+                            <input type="checkbox" name="useDriver" id="ud" class="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 cursor-pointer">
+                            <label for="ud" class="text-sm font-bold text-gray-700 cursor-pointer select-none">ต้องการคนขับรถ</label>
+                        </div>
+                        
+                        <div>
+                            <label class="text-xs font-bold text-gray-500 block mb-1">รายละเอียดการเดินทาง</label>
+                            <textarea name="remarks" class="w-full border p-3 rounded-xl text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition" rows="3" placeholder="ระบุสถานที่, จำนวนผู้โดยสาร, เบอร์ติดต่อ..." required></textarea>
+                        </div>
+                        
+                        <button class="w-full bg-blue-600 text-white p-3.5 rounded-xl font-bold shadow-lg hover:bg-blue-700 hover:shadow-xl transition-all transform active:scale-95 flex items-center justify-center gap-2">
+                            <span>ยืนยันการจอง</span> <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                        </button>
+                    </form>
+                </div>
 
-                    resDiv.innerHTML = html;
-                    resDiv.classList.remove('hidden');
-
-                } catch (e) {
-                    console.error(e);
-                }
-            }
+                <!-- Right: Booking History -->
+                <div class="md:col-span-7 space-y-4">
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border">
+                        <div class="flex justify-between items-center mb-6">
+                            <h3 class="font-bold text-lg text-gray-800">ประวัติการจองของฉัน</h3>
+                            <span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">${myBookings.length} รายการ</span>
+                        </div>
+                        
+                        ${myBookings.length===0 
+                            ? `<div class="text-center text-gray-400 py-12 border-2 border-dashed border-gray-100 rounded-xl bg-gray-50">
+                                <i data-lucide="calendar-off" class="w-10 h-10 mx-auto mb-2 opacity-30"></i>
+                                ยังไม่มีรายการจอง
+                               </div>` 
+                            : `<div class="space-y-3">
+                                ${myBookings.map(b => `
+                                    <div class="border border-gray-100 p-5 rounded-2xl bg-white hover:shadow-md transition group relative overflow-hidden">
+                                        <div class="flex justify-between items-start relative z-10">
+                                            <div>
+                                                <div class="flex items-center gap-2 mb-2">
+                                                    <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide border status-${b.status} bg-opacity-10 text-opacity-80 border-opacity-20" style="color:var(--status-color); border-color:var(--status-color);">
+                                                        ${b.status}
+                                                    </span>
+                                                    <span class="text-xs text-gray-400 font-mono">${dayjs(b.createdAt).format('DD/MM/YY')}</span>
+                                                </div>
+                                                <div class="font-bold text-lg text-gray-800 group-hover:text-blue-600 transition">${b.remarks}</div>
+                                                <div class="text-sm text-gray-500 flex items-center gap-2 mt-1">
+                                                    <i data-lucide="calendar" class="w-4 h-4 text-blue-400"></i> 
+                                                    <span class="font-medium text-gray-700">${dayjs(b.startDate).format('DD/MM')}</span> ${b.startTime} 
+                                                    <i data-lucide="arrow-right" class="w-3 h-3 text-gray-300"></i> 
+                                                    <span class="font-medium text-gray-700">${dayjs(b.endDate).format('DD/MM')}</span> ${b.endTime}
+                                                </div>
+                                                ${b.carId ? `<div class="mt-3 inline-flex items-center gap-2 text-xs bg-gray-50 border px-3 py-1.5 rounded-lg text-gray-600"><i data-lucide="car" class="w-3 h-3"></i> ${b.carId.name} ${b.driverId ? `<span class="text-gray-300">|</span> <i data-lucide="user" class="w-3 h-3"></i> ${b.driverId.name}` : ''}</div>` : ''}
+                                            </div>
+                                            <div class="flex flex-col gap-2 items-end pt-1">
+                                                ${b.status==='approved' ? `<button onclick="startTrip('${b._id}')" class="bg-green-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow hover:bg-green-700 flex items-center gap-1 transition transform hover:scale-105">🚀 เริ่มงาน</button>` : ''}
+                                                ${b.status==='active' ? `<button onclick="endTrip('${b._id}', ${b.startOdometer})" class="bg-gray-800 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow hover:bg-black flex items-center gap-1 transition transform hover:scale-105">🏁 คืนรถ</button>` : ''}
+                                                ${['pending','approved'].includes(b.status) ? `<button onclick="cancelBooking('${b._id}')" class="text-red-500 text-xs font-medium hover:text-red-700 hover:underline px-2 py-1">ยกเลิก</button>` : ''}
+                                            </div>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                               </div>`
+                        }
+                    </div>
+                </div>
+            </div>`;
         }
 
-        function renderCalendar(container) {
-            const dayjs = window.dayjs;
-            if (!dayjs) { container.innerHTML = '<div class="text-center text-red-500">Calendar Error: Day.js not loaded</div>'; return; }
-            dayjs.locale('th'); 
+        // --- VIEW: HISTORY & EDIT ---
+        function renderHistoryView(c) {
+            const list = state.bookings.sort((a,b)=>new Date(b.startDate)-new Date(a.startDate));
+            c.innerHTML = `
+            <div class="bg-white p-6 rounded-2xl shadow-sm border">
+                <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+                    <h3 class="font-bold text-xl flex items-center gap-2 text-gray-800"><div class="bg-indigo-100 p-2 rounded-lg text-indigo-600"><i data-lucide="file-text"></i></div> ประวัติการใช้งาน & แก้ไข</h3>
+                    <button onclick="exportCSV()" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 shadow hover:bg-green-700 transition"><i data-lucide="download"></i> Export CSV</button>
+                </div>
+                <div class="overflow-x-auto rounded-xl border border-gray-200">
+                    <table class="w-full text-left text-sm border-collapse">
+                        <thead class="bg-gray-50 text-gray-600 font-bold text-xs uppercase tracking-wider">
+                            <tr>
+                                <th class="p-4 border-b">วันที่ / เวลา</th>
+                                <th class="p-4 border-b">รายละเอียด</th>
+                                <th class="p-4 border-b">รถ / คนขับ</th>
+                                <th class="p-4 border-b text-right">เลขไมล์ (km)</th>
+                                <th class="p-4 border-b text-right">ค่าใช้จ่าย (บาท)</th>
+                                <th class="p-4 border-b text-center">สถานะ</th>
+                                <th class="p-4 border-b text-right">จัดการ</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100">
+                            ${list.map(b => {
+                                const u = state.users.find(x=>x.username===b.userId)||{firstName:b.userId};
+                                const dist = (b.endOdometer && b.startOdometer) ? (b.endOdometer - b.startOdometer).toLocaleString() : '-';
+                                return `
+                                <tr class="hover:bg-gray-50 transition group">
+                                    <td class="p-4 align-top">
+                                        <div class="font-bold text-gray-800">${dayjs(b.startDate).format('DD/MM/YY')}</div>
+                                        <div class="text-xs text-gray-500 font-mono mt-1">${b.startTime} - ${b.endTime}</div>
+                                    </td>
+                                    <td class="p-4 align-top">
+                                        <div class="font-medium text-gray-900 line-clamp-2" title="${b.remarks}">${b.remarks}</div>
+                                        <div class="text-xs text-gray-500 mt-1 flex items-center gap-1"><i data-lucide="user" class="w-3 h-3"></i> ${u.firstName}</div>
+                                    </td>
+                                    <td class="p-4 align-top">
+                                        <div class="text-xs font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded inline-block mb-1">🚘 ${b.carId?.name||'-'}</div>
+                                        <div class="text-xs font-medium text-green-700 bg-green-50 px-2 py-0.5 rounded inline-block">👨‍✈️ ${b.driverId?.name||'-'}</div>
+                                    </td>
+                                    <td class="p-4 align-top text-right">
+                                        <div class="text-gray-900 font-mono text-xs">Start: <span class="font-bold">${b.startOdometer?.toLocaleString()||'-'}</span></div>
+                                        <div class="text-gray-900 font-mono text-xs">End: <span class="font-bold">${b.endOdometer?.toLocaleString()||'-'}</span></div>
+                                        ${dist!=='-'?`<div class="text-[10px] text-blue-600 font-bold mt-1 bg-blue-50 inline-block px-1 rounded">+${dist} km</div>`:''}
+                                    </td>
+                                    <td class="p-4 align-top text-right text-xs">
+                                        <div>⛽ ${b.fuelCost?.toLocaleString()||0}</div>
+                                        <div>🛣️ ${b.tollCost?.toLocaleString()||0}</div>
+                                        <div class="border-t mt-1 pt-1 font-bold text-gray-700">Total: ${((b.fuelCost||0)+(b.tollCost||0)).toLocaleString()}</div>
+                                    </td>
+                                    <td class="p-4 align-top text-center">
+                                        <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase status-${b.status} text-white shadow-sm border border-white border-opacity-20">${b.status}</span>
+                                    </td>
+                                    <td class="p-4 align-top text-right">
+                                        ${state.currentUser.role==='admin' ? `<button onclick="openEditBookingModal('${b._id}')" class="text-blue-600 bg-white border border-blue-200 p-2 rounded-lg hover:bg-blue-50 transition shadow-sm" title="แก้ไขข้อมูล"><i data-lucide="edit-3" class="w-4 h-4"></i></button>` : ''}
+                                    </td>
+                                </tr>`;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>`;
+        }
+
+        function renderCalendar(c) {
             const now = dayjs(state.currentDate);
             const monthStart = now.startOf('month');
             const monthEnd = now.endOf('month');
-            const startDate = monthStart.startOf('week');
-            const endDate = monthEnd.endOf('week');
-            let days = [];
-            let day = startDate;
-            
-            // Logic to disable "Prev" button if user tries to go back past current month (for normal user)
-            const isUser = state.currentUser.role === 'user';
-            const realToday = dayjs();
-            const isCurrentMonth = now.isSame(realToday, 'month');
-            const disablePrev = isUser && (now.isBefore(realToday, 'month') || isCurrentMonth);
+            const start = monthStart.startOf('week');
+            const end = monthEnd.endOf('week');
+            let days = []; let d = start;
 
-            while (day.isBefore(endDate) || day.isSame(endDate, 'day')) {
-                const dateStr = day.format('D');
-                const isToday = day.isSame(dayjs(), 'day');
-                const isOtherMonth = !day.isSame(monthStart, 'month');
-                const dayBookings = (state.bookings || []).filter(b => { return dayjs(b.startDate).isSame(day, 'day'); });
-                const dots = dayBookings.map(b => {
-                        let colorClass = 'bg-gray-300';
-                        if(b.status === 'approved') colorClass = 'bg-blue-600';
-                        else if(b.status === 'active') colorClass = 'bg-green-600';
-                        else if(b.status === 'pending') colorClass = 'bg-yellow-500';
-                        else if(b.status === 'rejected' || b.status === 'maintenance') colorClass = 'bg-red-500';
-                        return `
-                        <div onclick="showBookingDetails('${b._id}')" class="event-pill ${colorClass} text-white px-2 py-0.5 rounded text-[10px] mb-1 truncate shadow-sm flex items-center gap-1" title="${b.remarks}">
-                            <span class="opacity-75">${b.startTime}</span>
-                            <span class="font-medium">${b.remarks}</span>
-                        </div>`;
-                }).join('');
+            while (d.isBefore(end) || d.isSame(end, 'day')) {
+                const dateStr = d.format('D');
+                const isCurr = d.isSame(dayjs(), 'day');
+                const isOther = !d.isSame(monthStart, 'month');
+                const events = state.bookings.filter(b => dayjs(b.startDate).isSame(d, 'day') && b.status !== 'cancelled');
+                
                 days.push(`
-                    <div class="calendar-day border-b border-r p-1 bg-white flex flex-col ${isOtherMonth ? 'bg-gray-50 text-gray-400' : ''}">
-                        <div class="text-right text-xs font-bold mb-1 p-1">
-                            <span class="${isToday ? 'bg-blue-600 text-white rounded-full w-6 h-6 inline-flex items-center justify-center' : ''}">${dateStr}</span>
+                    <div class="calendar-day ${isOther?'other-month':''}">
+                        <div class="text-right text-xs font-bold mb-1 p-2">
+                            <span class="${isCurr?'bg-blue-600 text-white w-7 h-7 rounded-full inline-flex items-center justify-center shadow-md':''}">${dateStr}</span>
                         </div>
-                        <div class="flex-1 overflow-hidden">
-                            ${dots}
+                        <div class="flex-1 overflow-hidden space-y-1 px-1">
+                            ${events.map(b => {
+                                let display = `${b.startTime} ${b.remarks}`;
+                                // 🔥 Improved Display for Maintenance
+                                if(b.status === 'maintenance') {
+                                    const res = b.carId ? `🚘 ${b.carId.plate||b.carId.name}` : (b.driverId ? `👨‍✈️ ${b.driverId.name}` : '');
+                                    display = `${res} [ปิด] ${b.remarks.replace('[ปิด]', '')}`;
+                                }
+                                return `<div onclick="showBookingDetails('${b._id}')" class="event-pill status-${b.status} shadow-sm" title="${display}">${display}</div>`;
+                            }).join('')}
                         </div>
+                    </div>`);
+                d = d.add(1, 'day');
+            }
+            c.innerHTML = `
+            <div class="bg-white p-6 rounded-2xl shadow-sm border h-full flex flex-col">
+                <div class="flex justify-between items-center mb-6">
+                    <div class="flex gap-2">
+                        <button onclick="changeMonth(-1)" class="p-2 hover:bg-gray-100 rounded-lg"><i data-lucide="chevron-left"></i></button>
+                        <button onclick="state.currentDate=new Date();renderApp()" class="px-3 text-sm font-bold hover:text-blue-600 transition">วันนี้</button>
+                        <button onclick="changeMonth(1)" class="p-2 hover:bg-gray-100 rounded-lg"><i data-lucide="chevron-right"></i></button>
                     </div>
-                `);
+                    <div class="font-bold text-xl text-gray-800">${now.format('MMMM YYYY')}</div>
+                </div>
+                <div class="border rounded-xl overflow-hidden flex flex-col flex-1 shadow-sm">
+                    <div class="grid grid-cols-7 bg-gray-50 border-b text-center text-xs font-bold text-gray-500 py-3 uppercase tracking-wider"><div>อา</div><div>จ</div><div>อ</div><div>พ</div><div>พฤ</div><div>ศ</div><div>ส</div></div>
+                    <div class="grid grid-cols-7 flex-1 bg-gray-100 gap-px border-l border-t">${days.join('')}</div>
+                </div>
+                <div class="mt-5 flex flex-wrap gap-4 text-xs text-gray-600 justify-center">
+                    <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full status-pending"></span> รออนุมัติ</div>
+                    <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full status-approved"></span> จองแล้ว</div>
+                    <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full status-active"></span> กำลังใช้</div>
+                    <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full status-completed"></span> จบงาน</div>
+                    <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full status-maintenance"></span> ซ่อม/หยุด</div>
+                </div>
+            </div>`;
+        }
+
+        function renderUserManagement(c) {
+            c.innerHTML = `
+            <div class="bg-white p-6 rounded-xl shadow-sm border">
+                <h3 class="font-bold mb-4 text-lg flex items-center gap-2"><i data-lucide="users" class="text-purple-600"></i> จัดการผู้ใช้งาน</h3>
+                <form onsubmit="addUser(event)" class="grid grid-cols-1 md:grid-cols-6 gap-3 mb-8 bg-purple-50 p-5 rounded-2xl border border-purple-100 shadow-sm">
+                    <input name="username" placeholder="Username" class="border p-2.5 rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-purple-500" required>
+                    <input name="password" placeholder="Password" class="border p-2.5 rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-purple-500" required>
+                    <input name="firstName" placeholder="ชื่อจริง" class="border p-2.5 rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-purple-500" required>
+                    <input name="lastName" placeholder="นามสกุล" class="border p-2.5 rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-purple-500" required>
+                    <input name="email" placeholder="Email" class="border p-2.5 rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-purple-500">
+                    <select name="department" class="border p-2.5 rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer"><option value="">แผนก...</option>${DEPARTMENTS.map(d=>`<option value="${d}">${d}</option>`).join('')}</select>
+                    <button class="bg-purple-600 text-white px-4 py-2.5 rounded-lg text-sm font-bold md:col-span-6 hover:bg-purple-700 shadow-md transition transform active:scale-95">เพิ่มผู้ใช้ใหม่</button>
+                </form>
+                <div class="overflow-x-auto rounded-xl border border-gray-200">
+                    <table class="w-full text-sm text-left">
+                        <thead class="bg-gray-50 text-gray-500 font-bold text-xs uppercase"><tr><th class="p-4">User</th><th class="p-4">Name</th><th class="p-4">Dept</th><th class="p-4">Status</th><th class="p-4 text-right">Actions</th></tr></thead>
+                        <tbody>
+                            ${state.users.map(u => `
+                            <tr class="hover:bg-gray-50 transition ${!u.isActive?'bg-gray-100 opacity-60':''}">
+                                <td class="p-4 font-bold text-gray-700">${u.username}</td>
+                                <td class="p-4 text-gray-600">${u.firstName} ${u.lastName}</td>
+                                <td class="p-4"><span class="bg-purple-50 text-purple-700 px-2.5 py-1 rounded-md text-xs font-medium border border-purple-100">${u.department}</span></td>
+                                <td class="p-4">${u.lineUserId ? '<span class="text-green-600 flex gap-1 items-center font-bold text-xs"><i data-lucide="check-circle" class="w-3 h-3"></i> Linked</span>' : '<span class="text-gray-400 text-xs flex gap-1 items-center"><i data-lucide="circle" class="w-3 h-3"></i> Unlinked</span>'}</td>
+                                <td class="p-4 text-right flex justify-end gap-1">
+                                    <button onclick="openEditUserModal('${u._id}')" class="bg-white border border-gray-200 text-gray-500 p-2 rounded-lg hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition" title="แก้ไข"><i data-lucide="edit" class="w-4 h-4"></i></button>
+                                    <button onclick="openResetPwdModal('${u._id}','${u.username}')" class="bg-white border border-gray-200 text-gray-500 p-2 rounded-lg hover:bg-yellow-50 hover:text-yellow-600 hover:border-yellow-200 transition" title="รีเซ็ตพาส"><i data-lucide="key" class="w-4 h-4"></i></button>
+                                    <button onclick="toggleUser('${u._id}', ${u.isActive})" class="border p-1.5 rounded text-xs w-8 ${u.isActive?'text-green-600 border-green-200 bg-green-50':'text-gray-400 border-gray-300 hover:bg-gray-100'}" title="สถานะ">${u.isActive?'ON':'OFF'}</button>
+                                    ${u.lineUserId ? `<button onclick="unlinkLine('${u._id}')" class="bg-white border border-gray-200 text-gray-500 p-2 rounded-lg hover:bg-gray-100 transition" title="ปลดไลน์"><i data-lucide="unlink" class="w-4 h-4"></i></button>` : ''}
+                                    <button onclick="deleteResource('users','${u._id}')" class="bg-white border border-gray-200 text-gray-400 p-2 rounded-lg hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                                </td>
+                            </tr>`).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>`;
+        }
+
+        // --- MODALS HTML ---
+        function renderModals() {
+            document.getElementById('modals-container').innerHTML = `
+                <!-- Change Pwd -->
+                <div id="changePwdModal" class="modal fixed inset-0 bg-black/70 flex items-center justify-center p-4"><div class="bg-white p-6 rounded-2xl w-full max-w-sm modal-content shadow-2xl"><h3 class="font-bold mb-4 text-lg">เปลี่ยนรหัสผ่านส่วนตัว</h3><form onsubmit="handleChangePwdSubmit(event)" class="space-y-4"><input type="password" name="oldPassword" placeholder="รหัสเดิม" class="w-full border p-3 rounded-lg bg-gray-50" required><input type="password" name="newPassword" placeholder="รหัสใหม่" class="w-full border p-3 rounded-lg bg-gray-50" required><div class="flex justify-end gap-3 mt-6"><button type="button" onclick="closeModal()" class="text-gray-500 hover:bg-gray-100 px-4 py-2 rounded-lg">ยกเลิก</button><button class="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold">ยืนยัน</button></div></form></div></div>
+                <!-- Reset Pwd Admin -->
+                <div id="resetPwdModal" class="modal fixed inset-0 bg-black/70 flex items-center justify-center p-4"><div class="bg-white p-6 rounded-2xl w-full max-w-sm modal-content shadow-2xl"><h3 class="font-bold mb-4 text-lg text-yellow-600 flex items-center gap-2"><i data-lucide="key"></i> รีเซ็ตรหัสผ่าน User</h3><form onsubmit="handleResetPwd(event)" class="space-y-4"><input type="password" name="password" placeholder="ตั้งรหัสผ่านใหม่ให้ User" class="w-full border p-3 rounded-lg bg-yellow-50 focus:ring-yellow-500 border-yellow-200" required><div class="flex justify-end gap-3 mt-6"><button type="button" onclick="closeModal()" class="text-gray-500 hover:bg-gray-100 px-4 py-2 rounded-lg transition">ยกเลิก</button><button class="bg-yellow-500 text-white px-6 py-2 rounded-lg font-bold hover:bg-yellow-600 shadow-md">รีเซ็ต</button></div></form></div></div>
+                <!-- Edit User -->
+                <div id="editUserModal" class="modal fixed inset-0 bg-black/70 flex items-center justify-center p-4"><div class="bg-white p-6 rounded-2xl w-full max-w-md modal-content shadow-2xl"><h3 class="font-bold mb-6 text-lg">แก้ไขข้อมูลผู้ใช้</h3><form onsubmit="handleEditUserSubmit(event)" class="space-y-4"><div class="grid grid-cols-2 gap-4"><input id="eu-fn" name="firstName" placeholder="ชื่อ" class="w-full border p-3 rounded-lg" required><input id="eu-ln" name="lastName" placeholder="สกุล" class="w-full border p-3 rounded-lg" required></div><select id="eu-dept" name="department" class="w-full border p-3 rounded-lg bg-white" required>${DEPARTMENTS.map(d=>`<option value="${d}">${d}</option>`).join('')}</select><input id="eu-email" name="email" placeholder="Email (ถ้ามี)" class="w-full border p-3 rounded-lg"><div class="flex justify-end gap-3 mt-6"><button type="button" onclick="closeModal()" class="text-gray-500 hover:text-gray-700 px-3 py-2">ยกเลิก</button><button class="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold">บันทึก</button></div></form></div></div>
+                <!-- Edit Booking -->
+                <div id="editBookingModal" class="modal fixed inset-0 bg-black/70 flex items-center justify-center p-4"><div class="bg-white p-6 rounded-2xl w-full max-w-md modal-content shadow-2xl"><h3 class="font-bold mb-6 text-blue-600 text-lg flex items-center gap-2"><i data-lucide="edit-3"></i> แก้ไขข้อมูลงานจอง</h3><form onsubmit="handleEditBookingSubmit(event)" class="space-y-4"><div><label class="text-xs font-bold text-gray-500">เปลี่ยนรถ</label><select id="eb-car" class="w-full border p-2.5 rounded-lg text-sm"></select></div><div><label class="text-xs font-bold text-gray-500">เปลี่ยนคนขับ</label><select id="eb-driver" class="w-full border p-2.5 rounded-lg text-sm"></select></div><div class="grid grid-cols-2 gap-4"><div><label class="text-xs font-bold text-gray-500">ไมล์เริ่ม</label><input type="number" id="eb-s-odo" class="w-full border p-2 rounded-lg text-sm"></div><div><label class="text-xs font-bold text-gray-500">ไมล์จบ</label><input type="number" id="eb-e-odo" class="w-full border p-2 rounded-lg text-sm"></div></div><div class="grid grid-cols-2 gap-4"><div><label class="text-xs font-bold text-gray-500">น้ำมัน (บาท)</label><input type="number" id="eb-fuel" class="w-full border p-2 rounded-lg text-sm"></div><div><label class="text-xs font-bold text-gray-500">ทางด่วน (บาท)</label><input type="number" id="eb-toll" class="w-full border p-2 rounded-lg text-sm"></div></div><div class="flex justify-end gap-3 mt-6"><button type="button" onclick="closeModal()" class="text-gray-500">ยกเลิก</button><button class="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold">บันทึกการแก้ไข</button></div></form></div></div>
+                <!-- 🔥 Bulk Maintenance Modal -->
+                <div id="bulkMaintenanceModal" class="modal fixed inset-0 bg-black/80 flex items-center justify-center p-4"><div class="bg-white p-6 rounded-2xl w-full max-w-2xl modal-content flex flex-col h-[90vh]"><div class="flex justify-between items-center mb-4"><h3 class="font-bold text-xl text-orange-600 flex items-center gap-2"><i data-lucide="calendar-off"></i> จัดการวันหยุด/ซ่อม</h3><button onclick="closeModal()" class="text-gray-400 hover:text-gray-600"><i data-lucide="x"></i></button></div><div class="flex items-center justify-between mb-4 bg-gray-50 p-2 rounded-lg"><button onclick="bulkState.currentMonth=bulkState.currentMonth.subtract(1,'month');renderBulkCalendar()" class="p-2 hover:bg-white rounded"><i data-lucide="chevron-left"></i></button><span id="bulk-month-label" class="font-bold text-lg"></span><button onclick="bulkState.currentMonth=bulkState.currentMonth.add(1,'month');renderBulkCalendar()" class="p-2 hover:bg-white rounded"><i data-lucide="chevron-right"></i></button></div><div class="grid grid-cols-7 gap-2 mb-2 text-center text-xs font-bold text-gray-500 uppercase"><div onclick="toggleBulkDayColumn(0)" class="bulk-header hover:text-orange-500">อา</div><div onclick="toggleBulkDayColumn(1)" class="bulk-header hover:text-orange-500">จ</div><div onclick="toggleBulkDayColumn(2)" class="bulk-header hover:text-orange-500">อ</div><div onclick="toggleBulkDayColumn(3)" class="bulk-header hover:text-orange-500">พ</div><div onclick="toggleBulkDayColumn(4)" class="bulk-header hover:text-orange-500">พฤ</div><div onclick="toggleBulkDayColumn(5)" class="bulk-header hover:text-orange-500">ศ</div><div onclick="toggleBulkDayColumn(6)" class="bulk-header hover:text-orange-500">ส</div></div><div id="bulk-calendar-grid" class="grid grid-cols-7 gap-2 flex-1 overflow-y-auto p-1"></div><div class="mt-4 pt-4 border-t space-y-3"><input id="bulk-remark" class="w-full border p-3 rounded-lg text-sm" placeholder="ระบุสาเหตุ (เช่น ปิดปรับปรุงประจำปี, ลาพักร้อน)"><div class="flex justify-end gap-3"><button onclick="closeModal()" class="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">ยกเลิก</button><button onclick="submitBulkMaintenance()" class="px-6 py-2 bg-orange-600 text-white rounded-lg font-bold hover:bg-orange-700">บันทึกการเปลี่ยนแปลง</button></div></div></div></div>
+            `;
+        }
+
+        // --- BULK LOGIC ---
+        function openBulkMaintenanceModal(type, id, name) {
+            bulkState = { ...bulkState, resourceType: type, resourceId: id, resourceName: name, selectedDates: new Set() };
+            // Pre-select dates
+            state.bookings.forEach(b => {
+                if (b.status === 'maintenance') {
+                    if ((type === 'car' && b.carId?._id === id) || (type === 'driver' && b.driverId?._id === id)) {
+                        bulkState.selectedDates.add(b.startDate);
+                    }
+                }
+            });
+            document.getElementById('bulk-remark').value = '';
+            renderBulkCalendar();
+            openModal('bulkMaintenanceModal');
+        }
+
+        function renderBulkCalendar() {
+            const start = bulkState.currentMonth.startOf('month').startOf('week');
+            const end = bulkState.currentMonth.endOf('month').endOf('week');
+            const grid = document.getElementById('bulk-calendar-grid');
+            document.getElementById('bulk-month-label').innerText = bulkState.currentMonth.format('MMMM YYYY');
+            grid.innerHTML = '';
+
+            let day = start;
+            while (day.isBefore(end)) {
+                const dateStr = day.format('YYYY-MM-DD');
+                const isSelected = bulkState.selectedDates.has(dateStr);
+                const isCurrentMonth = day.isSame(bulkState.currentMonth, 'month');
+                
+                const hasConflict = state.bookings.some(b => 
+                    b.status !== 'maintenance' && b.status !== 'cancelled' && b.status !== 'rejected' &&
+                    dayjs(b.startDate).isSame(day, 'day') &&
+                    ((bulkState.resourceType==='car' && b.carId?._id===bulkState.resourceId) || (bulkState.resourceType==='driver' && b.driverId?._id===bulkState.resourceId))
+                );
+
+                const el = document.createElement('div');
+                el.className = `bulk-day ${isSelected ? 'selected' : ''} ${hasConflict ? 'has-conflict' : ''} ${!isCurrentMonth ? 'opacity-30' : ''}`;
+                el.innerHTML = `<span class="text-sm">${day.date()}</span>${hasConflict ? '<div class="dot-indicator dot-conflict"></div>' : ''}`;
+                // 🔥 Allow selecting even if conflict exists (Admin Override)
+                el.onclick = () => toggleBulkDate(dateStr);
+                
+                grid.appendChild(el);
                 day = day.add(1, 'day');
             }
-            container.innerHTML = `
-                <div class="bg-white p-6 rounded-xl shadow-sm border h-full flex flex-col">
-                    <div class="flex justify-between items-center mb-6">
-                        <div class="flex items-center gap-2">
-                             <button onclick="changeMonth(-1)" ${disablePrev ? 'disabled class="p-2 text-gray-300 cursor-not-allowed"' : 'class="p-2 hover:bg-gray-100 rounded-full transition"'}><i data-lucide="chevron-left"></i></button>
-                             <button onclick="resetToToday()" class="px-3 py-1 text-sm bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 font-bold transition">วันนี้</button>
-                             <button onclick="changeMonth(1)" class="p-2 hover:bg-gray-100 rounded-full transition"><i data-lucide="chevron-right"></i></button>
-                        </div>
-                        <h3 class="font-bold text-xl text-gray-800 flex items-center gap-2"><i data-lucide="calendar" class="text-blue-600"></i> ${now.format('MMMM YYYY')}</h3>
-                    </div>
-                    <div class="flex-1 border border-gray-200 rounded-lg overflow-hidden flex flex-col">
-                         <div class="grid grid-cols-7 gap-0 bg-gray-100 border-b">
-                            ${['อา','จ','อ','พ','พฤ','ศ','ส'].map(d=>`<div class="py-3 text-center text-xs font-bold text-gray-500">${d}</div>`).join('')}
-                        </div>
-                        <div class="grid grid-cols-7 gap-0 flex-1">${days.join('')}</div>
-                    </div>
-                    <div class="mt-4 flex gap-4 text-xs text-gray-500 justify-center">
-                        <div class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-yellow-500"></span> รออนุมัติ</div>
-                        <div class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-blue-600"></span> อนุมัติแล้ว</div>
-                        <div class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-green-600"></span> กำลังเดินทาง</div>
-                        <div class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-red-500"></span> แจ้งซ่อม/ไม่อนุมัติ</div>
-                    </div>
-                </div>`;
+        }
+
+        function toggleBulkDate(dateStr) {
+            if (bulkState.selectedDates.has(dateStr)) bulkState.selectedDates.delete(dateStr);
+            else bulkState.selectedDates.add(dateStr);
+            renderBulkCalendar();
+        }
+
+        function toggleBulkDayColumn(dayIndex) {
+            let day = bulkState.currentMonth.startOf('month');
+            const end = bulkState.currentMonth.endOf('month');
+            while (day.day() !== dayIndex) day = day.add(1, 'day'); // Find first occurence
+
+            let allSelected = true;
+            const daysInCol = [];
+            while (day.isBefore(end) || day.isSame(end, 'day')) {
+                const ds = day.format('YYYY-MM-DD');
+                daysInCol.push(ds);
+                if (!bulkState.selectedDates.has(ds)) allSelected = false;
+                day = day.add(7, 'day');
+            }
+
+            daysInCol.forEach(d => {
+                // Allow bulk select regardless of conflict
+                if(allSelected) bulkState.selectedDates.delete(d);
+                else bulkState.selectedDates.add(d);
+            });
+            renderBulkCalendar();
+        }
+
+        async function submitBulkMaintenance() {
+            const remark = document.getElementById('bulk-remark').value || 'ปิดปรับปรุง';
+            const selectedArray = Array.from(bulkState.selectedDates);
+            const currentMaintenance = state.bookings.filter(b => 
+                b.status === 'maintenance' && 
+                ((bulkState.resourceType==='car' && b.carId?._id===bulkState.resourceId) || (bulkState.resourceType==='driver' && b.driverId?._id===bulkState.resourceId))
+            );
+            const currentDates = new Set(currentMaintenance.map(b => b.startDate));
+
+            const toAdd = selectedArray.filter(d => !currentDates.has(d));
+            const toRemove = currentMaintenance.filter(b => !bulkState.selectedDates.has(b.startDate));
+
+            try {
+                for (const b of toRemove) await api.action('delete', `bookings/${b._id}`);
+                for (const d of toAdd) {
+                    await api.action('post', 'bookings', {
+                        startDate: d, startTime: '00:00', endDate: d, endTime: '23:59',
+                        status: 'maintenance', remarks: `[ปิด] ${remark}`,
+                        userId: state.currentUser.username, // 🔥 FIX: Send correct admin ID
+                        carId: bulkState.resourceType==='car' ? bulkState.resourceId : null,
+                        driverId: bulkState.resourceType==='driver' ? bulkState.resourceId : null
+                    });
+                }
+                Swal.fire('Success', 'บันทึกข้อมูลเรียบร้อย', 'success');
+                closeModal();
+                api.fetchData();
+            } catch (e) { Swal.fire('Error', e.message, 'error'); }
         }
 
         // --- ACTIONS ---
-        function switchView(mode) { state.viewMode = mode; renderApp(); }
-        function logout() { 
-            localStorage.removeItem('carBookingUser'); 
-            localStorage.removeItem('authToken'); // 🔐 Clear Token
+        async function checkAvail() { const sd=document.getElementById('sd').value, st=document.getElementById('st').value, ed=document.getElementById('ed').value, et=document.getElementById('et').value, badge=document.getElementById('avail-badge'); if(sd&&st&&ed&&et){const r=await api.action('post','check-availability',{startDate:sd,startTime:st,endDate:ed,endTime:et}); if(r.success){document.getElementById('cc').innerText=r.data.availableCars.length;document.getElementById('dc').innerText=r.data.availableDrivers.length;badge.classList.remove('hidden');}}else badge.classList.add('hidden'); }
+        
+        // 🔥🔥 BUG FIX: Added Check for Success/Fail
+        async function submitBooking(e){ 
+            e.preventDefault(); 
+            const d = Object.fromEntries(new FormData(e.target)); 
+            d.useDriver = document.getElementById('ud').checked; 
+            
+            // Show loading
+            const btn = e.target.querySelector('button');
+            const oldText = btn.innerHTML;
+            btn.innerHTML = 'กำลังบันทึก...';
+            btn.disabled = true;
+
+            const res = await api.action('post','bookings',d); 
+            
+            if (res.success) {
+                Swal.fire('Success', 'จองสำเร็จ! กรุณารอ Admin อนุมัติ', 'success');
+                api.fetchData();
+                e.target.reset(); // Clear Form
+                document.getElementById('avail-badge').classList.add('hidden');
+            } else {
+                Swal.fire('Error', res.message || 'เกิดข้อผิดพลาดในการจอง', 'error');
+            }
+
+            btn.innerHTML = oldText;
+            btn.disabled = false;
+        }
+
+        async function approveBooking(id){ const c=document.getElementById(`c-${id}`).value, d=document.getElementById(`d-${id}`).value; if(!c)return Swal.fire('เลือกรถ'); await api.action('put',`bookings/${id}`,{status:'approved',carId:c,driverId:d}); api.fetchData(); }
+        async function rejectBooking(id){ await api.action('put',`bookings/${id}`,{status:'rejected'}); api.fetchData(); }
+        async function startTrip(id){ const b=state.bookings.find(x=>x._id===id); let co=0; if(b.carId){const r=await axios.get(`${API_URL}/cars`);const c=r.data.find(x=>x._id===(b.carId._id||b.carId));if(c)co=c.currentOdometer||0;} const {value:v}=await Swal.fire({title:'เริ่มเดินทาง',html:`<div class="text-left bg-blue-50 p-3 rounded mb-2">ไมล์ปัจจุบัน: <b>${co.toLocaleString()}</b></div><input id="sw1" type="number" class="swal2-input" value="${co}">`,preConfirm:()=>{const v=document.getElementById('sw1').value;if(v<co)Swal.showValidationMessage('ห้ามต่ำกว่าเดิม');return v;}}); if(v){await api.action('put',`bookings/${id}`,{status:'active',startOdometer:v});api.fetchData();} }
+        async function endTrip(id,so){ const {value:f}=await Swal.fire({title:'คืนรถ',html:`<input id="eo" placeholder="เลขไมล์จบ > ${so}" class="swal2-input"><input id="ef" placeholder="น้ำมัน" class="swal2-input"><input id="et" placeholder="ทางด่วน" class="swal2-input">`,preConfirm:()=>{return {endOdometer:document.getElementById('eo').value, fuelCost:document.getElementById('ef').value, tollCost:document.getElementById('et').value}}}); if(f){if(Number(f.endOdometer)<=Number(so))return Swal.fire('Error','ไมล์จบต้องมากกว่า','error'); await api.action('put',`bookings/${id}`,{status:'completed',...f});api.fetchData();} }
+        async function addResource(e,t){ e.preventDefault(); await api.action('post',t,Object.fromEntries(new FormData(e.target))); api.fetchData(); e.target.reset(); }
+        async function deleteResource(t,id){ if((await Swal.fire({title:'ยืนยันลบ?',showCancelButton:true,confirmButtonColor:'#ef4444'})).isConfirmed){ await api.action('delete',`${t}/${id}`); api.fetchData(); } }
+        async function addUser(e){ e.preventDefault(); await api.action('post','users',Object.fromEntries(new FormData(e.target))); api.fetchData(); e.target.reset(); }
+        
+        function openEditUserModal(id){ const u=state.users.find(x=>x._id===id); modalData=u; document.getElementById('eu-fn').value=u.firstName; document.getElementById('eu-ln').value=u.lastName; document.getElementById('eu-dept').value=u.department; document.getElementById('eu-email').value=u.email; openModal('editUserModal'); }
+        async function handleEditUserSubmit(e){ e.preventDefault(); await api.action('put',`users/${modalData._id}`,Object.fromEntries(new FormData(e.target))); closeModal(); api.fetchData(); }
+        function openResetPwdModal(id,u){ modalData={id,username:u}; openModal('resetPwdModal'); }
+        async function handleResetPwd(e){ e.preventDefault(); await api.action('put',`users/${modalData.id}`,{password:new FormData(e.target).get('password')}); closeModal(); Swal.fire('Success'); }
+        async function toggleUser(id, curr){ await api.action('put',`users/${id}`,{isActive:!curr}); api.fetchData(); }
+        async function unlinkLine(id){ if((await Swal.fire({title:'Unlink?',showCancelButton:true})).isConfirmed){ await api.action('put',`users/${id}`,{resetLine:true}); api.fetchData(); } }
+        
+        function openEditBookingModal(id){ const b=state.bookings.find(x=>x._id===id); modalData=b; document.getElementById('eb-car').innerHTML='<option value="">--</option>'+state.cars.map(c=>`<option value="${c._id}" ${b.carId?._id===c._id?'selected':''}>${c.name}</option>`).join(''); document.getElementById('eb-driver').innerHTML='<option value="">--</option>'+state.drivers.map(d=>`<option value="${d._id}" ${b.driverId?._id===d._id?'selected':''}>${d.name}</option>`).join(''); document.getElementById('eb-s-odo').value=b.startOdometer||0; document.getElementById('eb-e-odo').value=b.endOdometer||0; document.getElementById('eb-fuel').value=b.fuelCost||0; document.getElementById('eb-toll').value=b.tollCost||0; openModal('editBookingModal'); }
+        async function handleEditBookingSubmit(e){ e.preventDefault(); const d={carId:document.getElementById('eb-car').value||null, driverId:document.getElementById('eb-driver').value||null, startOdometer:document.getElementById('eb-s-odo').value, endOdometer:document.getElementById('eb-e-odo').value, fuelCost:document.getElementById('eb-fuel').value, tollCost:document.getElementById('eb-toll').value}; await api.action('put',`bookings/${modalData._id}`,d); closeModal(); Swal.fire('Updated'); api.fetchData(); }
+
+        // 🔥 FIX: Improved Logout
+        function logout(){ 
+            if(autoRefreshInterval) clearInterval(autoRefreshInterval);
+            localStorage.clear(); 
             state.currentUser = null; 
             renderApp(); 
         }
-        function hardReset() { localStorage.clear(); location.reload(); }
-        function changeMonth(n) { if(window.dayjs){ state.currentDate = window.dayjs(state.currentDate).add(n, 'month').toDate(); renderApp(); } }
-        function resetToToday() { state.currentDate = new Date(); renderApp(); }
-
+        // 🔥 FIX: LINE Connect
+        function openLineQR(){ if(!state.currentUser?._id) return Swal.fire('Error','User ID not found','error'); api.action('post','generate-link-token',{userId:state.currentUser._id}).then(r=>{if(r.success)Swal.fire({title:'LINE Connect',html:`<div class="flex justify-center"><img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`https://line.me/R/oaMessage/${LINE_BOT_ID}/?!link ${r.data.token}`)}"></div>`});}); }
+        function exportCSV(){ const csv="\uFEFFDate,User,Car,Driver,Start,End,Fuel,Toll\n"+state.bookings.map(b=>`${b.startDate},"${b.userId}","${b.carId?.name||'-'}","${b.driverId?.name||'-'}",${b.startOdometer||0},${b.endOdometer||0},${b.fuelCost||0},${b.tollCost||0}`).join('\n'); const a=document.createElement('a'); a.href='data:text/csv;charset=utf-8,'+encodeURI(csv); a.download='report.csv'; a.click(); }
+        function changeMonth(n){ state.currentDate=dayjs(state.currentDate).add(n,'month').toDate(); renderApp(); }
+        
         function showBookingDetails(id) {
             const b = state.bookings.find(x => x._id === id);
             if(!b) return;
-            const car = state.cars.find(c => c._id === b.carId) || {name: '-', plate: '-'}; // Handle string ID from unpopulated API just in case
+            const car = state.cars.find(c => c._id === b.carId) || {name: '-', plate: '-'};
             const carName = b.carId?.name || car.name || '-';
             const carPlate = b.carId?.plate || car.plate || '-';
-            
             const driver = state.drivers.find(d => d._id === b.driverId) || {name: '-', phone: '-'};
             const driverName = b.driverId?.name || driver.name || '-';
             const driverPhone = b.driverId?.phone || driver.phone || '-';
+            const user = state.users.find(u => u.username === b.userId) || {firstName: b.userId, lastName: '', department: '-'};
+            const formatDate = (d) => dayjs(d).format('DD MMM BBBB');
+            
+            const statusColors = {
+                'approved': 'bg-blue-100 text-blue-700',
+                'active': 'bg-green-100 text-green-700',
+                'pending': 'bg-yellow-100 text-yellow-700',
+                'maintenance': 'bg-orange-100 text-orange-700',
+                'completed': 'bg-teal-100 text-teal-700',
+                'cancelled': 'bg-gray-100 text-gray-500',
+                'rejected': 'bg-red-100 text-red-600'
+            };
+            const statusClass = statusColors[b.status] || 'bg-gray-100';
 
-            const user = state.users.find(u => u.username === b.userId) || {firstName: b.userId, lastName: ''};
+            let statsHtml = '';
+            if (b.status === 'completed' || b.status === 'active') {
+                 statsHtml = `
+                <div class="mt-4 pt-3 border-t border-dashed">
+                    <h4 class="text-xs font-bold text-gray-400 uppercase mb-2">บันทึกการเดินทาง</h4>
+                    <div class="grid grid-cols-3 gap-2 text-center bg-gray-50 p-2 rounded-lg">
+                        <div><p class="text-[10px] text-gray-400">ระยะทาง</p><p class="font-bold text-sm text-gray-800">${(b.endOdometer && b.startOdometer) ? (b.endOdometer - b.startOdometer).toLocaleString() : '-'} <span class="text-[10px]">km</span></p></div>
+                        <div><p class="text-[10px] text-gray-400">ค่าน้ำมัน</p><p class="font-bold text-sm text-gray-800">${b.fuelCost || 0} <span class="text-[10px]">฿</span></p></div>
+                        <div><p class="text-[10px] text-gray-400">ค่าทางด่วน</p><p class="font-bold text-sm text-gray-800">${b.tollCost || 0} <span class="text-[10px]">฿</span></p></div>
+                    </div>
+                </div>`;
+            }
 
             Swal.fire({
-                title: 'รายละเอียดการจอง',
                 html: `
-                    <div class="text-left space-y-2 text-sm">
-                        <div class="bg-gray-50 p-3 rounded border">
-                            <p><strong>หัวข้อ:</strong> ${b.remarks}</p>
-                            <p><strong>ผู้จอง:</strong> ${user.firstName} ${user.lastName}</p>
-                            <p><strong>สถานะ:</strong> <span class="uppercase font-bold text-blue-600">${b.status}</span></p>
+                    <div class="text-left space-y-4">
+                        <div class="flex justify-between items-start border-b pb-3">
+                            <div>
+                                <h3 class="font-bold text-lg text-gray-800 leading-tight">${b.remarks || 'ไม่มีรายละเอียด'}</h3>
+                                <p class="text-[10px] text-gray-400 mt-1">ID: ${b._id.slice(-6).toUpperCase()}</p>
+                            </div>
+                            <span class="px-3 py-1 rounded-full text-xs font-bold uppercase ${statusClass}">${b.status}</span>
                         </div>
-                        <div class="grid grid-cols-2 gap-2">
-                             <div><strong>เริ่ม:</strong><br>${b.startDate} ${b.startTime}</div>
-                             <div><strong>ถึง:</strong><br>${b.endDate} ${b.endTime}</div>
+
+                        <div class="flex items-center gap-3 bg-blue-50 p-3 rounded-xl border border-blue-100">
+                            <div class="flex-1">
+                                <p class="text-[10px] text-gray-500 uppercase">เริ่มต้น</p>
+                                <p class="font-bold text-sm text-blue-700">${formatDate(b.startDate)}</p>
+                                <p class="text-xs font-mono text-gray-600 bg-white inline-block px-1.5 rounded mt-0.5">${b.startTime}</p>
+                            </div>
+                            <div class="text-blue-300"><i data-lucide="arrow-right" class="w-5 h-5"></i></div>
+                            <div class="flex-1 text-right">
+                                <p class="text-[10px] text-gray-500 uppercase">สิ้นสุด</p>
+                                <p class="font-bold text-sm text-blue-700">${formatDate(b.endDate)}</p>
+                                <p class="text-xs font-mono text-gray-600 bg-white inline-block px-1.5 rounded mt-0.5">${b.endTime}</p>
+                            </div>
                         </div>
-                        <hr>
-                        <div class="flex items-center gap-2"><i data-lucide="car" class="w-4 h-4 text-gray-400"></i> ${carName} (${carPlate})</div>
-                        <div class="flex items-center gap-2"><i data-lucide="user" class="w-4 h-4 text-gray-400"></i> ${driverName} (${driverPhone})</div>
+
+                        <div class="flex items-center gap-3 p-2 border rounded-lg bg-gray-50">
+                            <div class="bg-white p-2 rounded-full border shadow-sm"><i data-lucide="user" class="text-gray-600 w-5 h-5"></i></div>
+                            <div>
+                                <p class="text-[10px] text-gray-400 uppercase font-bold">ผู้จอง</p>
+                                <p class="font-bold text-sm text-gray-800">${user.firstName} ${user.lastName}</p>
+                                <p class="text-xs text-gray-500">${user.department || '-'}</p>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-3">
+                            <div class="border p-3 rounded-xl bg-white relative overflow-hidden group hover:border-blue-300 transition">
+                                <div class="absolute top-2 right-2 opacity-10"><i data-lucide="car" class="w-8 h-8"></i></div>
+                                <p class="text-[10px] text-gray-400 uppercase font-bold mb-1">ยานพาหนะ</p>
+                                <p class="font-bold text-sm text-gray-800 truncate" title="${carName}">${carName}</p>
+                                <p class="text-xs bg-gray-100 text-gray-600 inline-block px-1.5 py-0.5 rounded mt-1 font-mono">${carPlate}</p>
+                            </div>
+                            <div class="border p-3 rounded-xl bg-white relative overflow-hidden group hover:border-green-300 transition">
+                                <div class="absolute top-2 right-2 opacity-10"><i data-lucide="steering-wheel" class="w-8 h-8"></i></div>
+                                <p class="text-[10px] text-gray-400 uppercase font-bold mb-1">คนขับ</p>
+                                <p class="font-bold text-sm text-gray-800 truncate" title="${driverName}">${driverName}</p>
+                                <p class="text-xs text-gray-500 mt-1 flex items-center gap-1"><i data-lucide="phone" class="w-3 h-3"></i> ${driverPhone}</p>
+                            </div>
+                        </div>
+                        ${statsHtml}
                     </div>
                 `,
-                confirmButtonText: 'ปิด',
+                showConfirmButton: true,
+                confirmButtonText: 'ปิดหน้าต่าง',
+                confirmButtonColor: '#3b82f6',
+                width: '400px',
                 didOpen: () => lucide.createIcons()
             });
         }
 
-        async function submitBooking(e) {
-            e.preventDefault(); 
-            const fd = new FormData(e.target); 
-            const data = Object.fromEntries(fd); 
-            data.useDriver = fd.get('useDriver') === 'on';
-            const start = new Date(`${data.startDate}T${data.startTime}`);
-            const end = new Date(`${data.endDate}T${data.endTime}`);
-            const now = new Date();
-            const allowTime = new Date(now.getTime() - 10 * 60000); 
-            if (start < allowTime) return Swal.fire('Error', 'ห้ามจองย้อนหลัง (เกิน 10 นาที)');
-            if (start >= end) return Swal.fire('Error', 'เวลาคืนรถต้องหลังเวลารับรถ');
-            
-            // 🔥 Basic Client-Side Validation (Fast Feedback)
-            const diffMs = end - start;
-            if (diffMs < 30 * 60000) return Swal.fire('Error', 'ระยะเวลาจองขั้นต่ำ 30 นาที');
-
-            const res = await api.action('post', 'bookings', { userId: state.currentUser.username, ...data }); 
-            if(res.success) { Swal.fire('Success','จองสำเร็จ','success'); api.fetchData(); } else { Swal.fire('Error', res.message); }
-        }
-
-        async function approveBooking(id) { const cId=document.getElementById(`c-${id}`).value; const dId=document.getElementById(`d-${id}`).value; if(!cId)return Swal.fire('เลือกรถ'); const res=await api.action('put',`bookings/${id}`,{status:'approved',carId:cId,driverId:dId||null}); if(res.success){Swal.fire('Success');api.fetchData();}else Swal.fire('Error',res.message); }
-        async function addResource(e, type) { e.preventDefault(); await api.action('post', type, Object.fromEntries(new FormData(e.target))); api.fetchData(); e.target.reset(); }
-        async function deleteResource(type, id) { if((await Swal.fire({title:'ยืนยันลบ?',showCancelButton:true})).isConfirmed) { await api.action('delete', `${type}/${id}`); api.fetchData(); } }
-        async function addUser(e) { e.preventDefault(); const data = Object.fromEntries(new FormData(e.target)); const res = await api.action('post', 'users', data); if(res.success){Swal.fire('สำเร็จ'); api.fetchData(); e.target.reset();} else Swal.fire('Error', res.message); }
-        async function deleteUser(id) { if((await Swal.fire({title:'ลบ?',showCancelButton:true})).isConfirmed) { await api.action('delete', `users/${id}`); api.fetchData(); } }
-        async function toggleUser(id, current) { await api.action('put', `users/${id}`, { isActive: !current }); api.fetchData(); }
-        async function unlinkLine(id) { if((await Swal.fire({title:'Unlink?',showCancelButton:true})).isConfirmed) { await api.action('put', `users/${id}`, { resetLine: true }); api.fetchData(); } }
-        async function openEditUserModal(id) { const u = state.users.find(x => x._id === id); openModal('editUserModal', false, u); }
-        async function handleEditUserSubmit(e) { e.preventDefault(); await api.action('put', `users/${modalData._id}`, Object.fromEntries(new FormData(e.target))); closeModal(); api.fetchData(); }
-        async function openResetPwdModal(id, username) { openModal('resetPwdModal', false, {id, username}); }
-        async function handleResetPwd(e) { e.preventDefault(); const pwd = new FormData(e.target).get('password'); await api.action('put', `users/${modalData.id}`, { password: pwd }); closeModal(); Swal.fire('Success'); }
-        async function openBlockModal(type, id, name) { openModal('blockModal', false, {type, id, name}); }
-        async function handleBlockSubmit(e) { e.preventDefault(); const data = Object.fromEntries(new FormData(e.target)); const payload = { ...data, userId: 'ADMIN', status: 'maintenance', useDriver: false, carId: modalData.type==='car'?modalData.id:null, driverId: modalData.type==='driver'?modalData.id:null, remarks: `[ปิด] ${data.remarks}` }; await api.action('post', 'bookings', payload); closeModal(); api.fetchData(); }
-        async function startTrip(id, date, time) { const {value:o}=await Swal.fire({title:'เลขไมล์',input:'number'}); if(o) { await api.action('put',`bookings/${id}`,{status:'active',startOdometer:o}); api.fetchData(); } }
+        function openModal(id){ document.getElementById(id).classList.add('show'); }
+        function closeModal(){ document.querySelectorAll('.modal').forEach(e=>e.classList.remove('show')); }
+        async function handleChangePwdSubmit(e){ e.preventDefault(); await api.action('post','change-password',{userId:state.currentUser.id,...Object.fromEntries(new FormData(e.target))}); closeModal(); Swal.fire('Success'); }
         
-        // 🔥 UPDATE: End Trip with Fuel/Toll Input
-        async function endTrip(id, startOdo) { 
-            const { value: formValues } = await Swal.fire({
-                title: 'บันทึกการคืนรถ',
-                html:
-                    `<input id="swal-odo" class="swal2-input" placeholder="เลขไมล์สิ้นสุด (ต้องมากกว่า ${startOdo})">` +
-                    `<input id="swal-fuel" class="swal2-input" placeholder="ค่าน้ำมัน (บาท)">` +
-                    `<input id="swal-toll" class="swal2-input" placeholder="ค่าทางด่วน (บาท)">`,
-                focusConfirm: false,
-                preConfirm: () => {
-                    const odo = document.getElementById('swal-odo').value;
-                    const fuel = document.getElementById('swal-fuel').value;
-                    const toll = document.getElementById('swal-toll').value;
-                    if (!odo || Number(odo) <= startOdo) {
-                        Swal.showValidationMessage(`เลขไมล์ต้องมากกว่า ${startOdo}`);
-                        return false;
-                    }
-                    return { 
-                        endOdometer: Number(odo), 
-                        fuelCost: fuel ? Number(fuel) : 0, 
-                        tollCost: toll ? Number(toll) : 0 
-                    };
+        function renderCharts() { 
+            if(!state.stats) return;
+            const render = (id, type, labels, data, colors, horizontal=false) => {
+                const ctx = document.getElementById(id);
+                if (ctx) {
+                    Chart.getChart(ctx)?.destroy();
+                    new Chart(ctx, { type, data: { labels, datasets: [{ label: 'จำนวนงาน', data, backgroundColor: colors, borderRadius: 6 }] }, options: { indexAxis: horizontal ? 'y' : 'x', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: type === 'doughnut' } } } });
                 }
-            });
-
-            if (formValues) {
-                await api.action('put', `bookings/${id}`, { 
-                    status: 'completed', 
-                    endOdometer: formValues.endOdometer,
-                    fuelCost: formValues.fuelCost,
-                    tollCost: formValues.tollCost
-                });
-                api.fetchData();
-            }
+            };
+            const carStats = state.stats.carStats || []; render('carChart', 'bar', carStats.map(x=>x.name), carStats.map(x=>x.count), '#3b82f6');
+            const driverStats = state.stats.driverStats || []; render('driverChart', 'bar', driverStats.map(x=>x.name), driverStats.map(x=>x.count), '#10b981', true);
+            const deptStats = state.stats.deptStats || []; render('deptChart', 'doughnut', deptStats.map(x=>x.name), deptStats.map(x=>x.count), ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6']);
         }
 
-        async function cancelBooking(id) { if((await Swal.fire({title:'ยกเลิก?',showCancelButton:true})).isConfirmed) { await api.action('put',`bookings/${id}`,{status:'cancelled',cancelledBy:state.currentUser.username}); api.fetchData(); } }
-        async function rejectBooking(id) { const {value:r}=await Swal.fire({title:'เหตุผล',input:'text'}); if(r) { await api.action('put',`bookings/${id}`,{status:'rejected',rejectionReason:r}); api.fetchData(); } }
-        async function handleChangePwdSubmit(e) { e.preventDefault(); const res = await api.action('post', 'change-password', { userId: state.currentUser.id, ...Object.fromEntries(new FormData(e.target)) }); if(res.success) { Swal.fire('สำเร็จ'); closeModal(); if(state.currentUser.mustChangePassword) logout(); } else Swal.fire('Error', res.message); }
-        async function openLineQR() { const res = await api.action('post', 'generate-link-token', {userId: state.currentUser.id}); if(res.success) Swal.fire({ title: 'LINE Connect', html: `<img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`https://line.me/R/oaMessage/${LINE_BOT_ID}/?!link ${res.data.token}`)}" class="mx-auto">` }); }
-
-        // --- NEW: Extension Modal ---
-        function openExtendModal(id, endDate, endTime) {
-            openModal('extendModal', false, { id, endDate, endTime });
-            document.getElementById('extend-date').value = endDate;
-            document.getElementById('extend-time').value = endTime;
-        }
-
-        async function handleExtendSubmit(e) {
-            e.preventDefault();
-            const newEndDate = document.getElementById('extend-date').value;
-            const newEndTime = document.getElementById('extend-time').value;
-            
-            const res = await api.action('post', `bookings/${modalData.id}/extend`, { newEndDate, newEndTime });
-            
-            if(res.success) {
-                Swal.fire('Success', 'ต่อเวลาสำเร็จ', 'success');
-                closeModal();
-                api.fetchData();
-            } else {
-                Swal.fire('Error', res.message, 'error');
-            }
-        }
-
-        // --- NEW: History Features ---
-        function openHistoryModal(type, id, name) {
-            openModal('historyModal', false, {type, id, name});
-            renderHistoryModalContent(type, id);
-        }
-
-        function renderHistoryModalContent(type, id) {
-            const historyBody = document.getElementById('history-modal-body');
-            const historyTitle = document.getElementById('history-modal-title');
-            
-            historyTitle.textContent = `ประวัติการทำงาน: ${modalData.name}`;
-            
-            const history = state.bookings.filter(b => {
-                if(!['completed', 'active', 'approved'].includes(b.status)) return false;
-                if(type === 'car') return b.carId?._id === id;
-                if(type === 'driver') return b.driverId?._id === id;
-                return false;
-            }).sort((a,b) => new Date(b.startDate) - new Date(a.startDate)); // Newest first
-
-            if(history.length === 0) {
-                historyBody.innerHTML = '<div class="text-center text-gray-400 py-10">ไม่พบประวัติการทำงาน</div>';
-                return;
-            }
-
-            const rows = history.map(b => {
-                const user = state.users.find(u => u.username === b.userId) || {firstName: b.userId, lastName: ''};
-                const distance = b.endOdometer && b.startOdometer ? (b.endOdometer - b.startOdometer) + ' km' : '-';
-                const statusColor = b.status === 'active' ? 'text-green-600' : (b.status==='completed' ? 'text-gray-600' : 'text-blue-600');
-                
-                // Add Cost Display in Modal
-                const costs = b.fuelCost || b.tollCost 
-                    ? `<br><span class="text-xs text-orange-500">น้ำมัน: ${b.fuelCost || 0} / ทางด่วน: ${b.tollCost || 0}</span>` 
-                    : '';
-
-                return `
-                <tr class="border-b text-sm">
-                    <td class="p-3">${b.startDate}<br><span class="text-xs text-gray-400">${b.startTime}</span></td>
-                    <td class="p-3 font-bold">${user.firstName} ${user.lastName}</td>
-                    <td class="p-3 truncate max-w-[150px]">${b.remarks}</td>
-                    <td class="p-3 text-right">
-                        ${b.startOdometer || '-'}<br>
-                        <span class="text-xs text-gray-400">จบ: ${b.endOdometer || '-'}</span>
-                    </td>
-                    <td class="p-3 text-right">
-                        <div class="font-bold">${distance}</div>
-                        ${costs}
-                    </td>
-                    <td class="p-3 text-right uppercase ${statusColor} text-xs font-bold">${b.status}</td>
-                </tr>`;
-            }).join('');
-
-            historyBody.innerHTML = `
-                <div class="overflow-x-auto max-h-[400px]">
-                    <table class="w-full text-left">
-                        <thead class="bg-gray-100 text-gray-600 sticky top-0">
-                            <tr>
-                                <th class="p-3">วันที่</th>
-                                <th class="p-3">ผู้ใช้</th>
-                                <th class="p-3">งาน</th>
-                                <th class="p-3 text-right">ไมล์ (เริ่ม/จบ)</th>
-                                <th class="p-3 text-right">ระยะทาง/ค่าใช้จ่าย</th>
-                                <th class="p-3 text-right">สถานะ</th>
-                            </tr>
-                        </thead>
-                        <tbody>${rows}</tbody>
-                    </table>
-                </div>`;
-        }
-
-        // --- MODALS ---
-        let modalData = {};
-        function openModal(id, force=false, data=null) { modalData = data || {}; document.getElementById(id).classList.add('show'); if(id==='editUserModal' && data){ document.getElementById('edit-fn').value = data.firstName; document.getElementById('edit-ln').value = data.lastName; document.getElementById('edit-dept').value = data.department; document.getElementById('edit-email').value = data.email; } }
-        function closeModal() { document.querySelectorAll('.modal').forEach(el => el.classList.remove('show')); }
-
-        function renderModals() {
-            const container = document.getElementById('modals-container');
-            container.innerHTML = `
-                <div id="rejectModal" class="modal fixed inset-0 bg-black/60 flex items-center justify-center z-50 opacity-0 pointer-events-none"><div class="bg-white p-6 rounded-xl shadow-xl w-80 modal-content"><h3 class="font-bold mb-3 text-red-600">เหตุผลไม่อนุมัติ</h3><textarea id="rejectReason" class="w-full border p-2 rounded" rows="3"></textarea><div class="flex justify-end gap-2 mt-3"><button onclick="closeModal()" class="text-gray-500">ยกเลิก</button><button onclick="confirmReject()" class="bg-red-600 text-white px-3 py-1 rounded">ยืนยัน</button></div></div></div>
-                <div id="editUserModal" class="modal fixed inset-0 bg-black/60 flex items-center justify-center z-50 opacity-0 pointer-events-none"><div class="bg-white p-6 rounded-xl w-96 modal-content"><h3 class="font-bold mb-4">แก้ไขผู้ใช้</h3><form onsubmit="handleEditUserSubmit(event)" class="space-y-3"><input name="firstName" id="edit-fn" placeholder="ชื่อ" class="w-full border p-2 rounded" required><input name="lastName" id="edit-ln" placeholder="นามสกุล" class="w-full border p-2 rounded" required><input name="department" id="edit-dept" placeholder="แผนก" class="w-full border p-2 rounded" required><input name="email" id="edit-email" placeholder="email" class="w-full border p-2 rounded" required><div class="flex justify-end gap-2"><button type="button" onclick="closeModal()" class="text-gray-500">ยกเลิก</button><button class="bg-blue-600 text-white px-3 py-1 rounded">บันทึก</button></div></form></div></div>
-                <div id="resetPwdModal" class="modal fixed inset-0 bg-black/60 flex items-center justify-center z-50 opacity-0 pointer-events-none"><div class="bg-white p-6 rounded-xl w-80 modal-content"><h3 class="font-bold mb-4">รีเซ็ตรหัสผ่าน</h3><form onsubmit="handleResetPwd(event)" class="space-y-3"><input type="password" name="password" placeholder="รหัสใหม่" class="w-full border p-2 rounded" required><div class="flex justify-end gap-2"><button type="button" onclick="closeModal()" class="text-gray-500">ยกเลิก</button><button class="bg-orange-500 text-white px-3 py-1 rounded">ยืนยัน</button></div></form></div></div>
-                <div id="blockModal" class="modal fixed inset-0 bg-black/60 flex items-center justify-center z-50 opacity-0 pointer-events-none"><div class="bg-white p-6 rounded-xl w-96 modal-content"><h3 class="font-bold mb-4 text-red-600">แจ้งซ่อม / ลา</h3><form onsubmit="handleBlockSubmit(event)" class="space-y-3"><div class="grid grid-cols-2 gap-2"><input type="date" name="startDate" class="border p-2 rounded w-full" required><input type="time" name="startTime" class="border p-2 rounded w-full" required></div><div class="grid grid-cols-2 gap-2"><input type="date" name="endDate" class="border p-2 rounded w-full" required><input type="time" name="endTime" class="border p-2 rounded w-full" required></div><input name="remarks" placeholder="สาเหตุ" class="border p-2 rounded w-full" required><div class="flex justify-end gap-2"><button type="button" onclick="closeModal()" class="text-gray-500">ยกเลิก</button><button class="bg-red-600 text-white px-3 py-1 rounded">บันทึก</button></div></form></div></div>
-                <div id="changePwdModal" class="modal fixed inset-0 bg-black/70 flex items-center justify-center z-50 opacity-0 pointer-events-none"><div class="bg-white p-6 rounded-xl w-80 modal-content"><h3 class="font-bold mb-4">เปลี่ยนรหัสผ่าน</h3><form onsubmit="handleChangePwdSubmit(event)" class="space-y-3"><input type="password" name="oldPassword" placeholder="รหัสเดิม" class="w-full border p-2 rounded" required><input type="password" name="newPassword" placeholder="รหัสใหม่" class="w-full border p-2 rounded" required><button class="w-full bg-blue-600 text-white py-2 rounded">ยืนยัน</button></form></div></div>
-                
-                <!-- History Modal -->
-                <div id="historyModal" class="modal fixed inset-0 bg-black/70 flex items-center justify-center z-50 opacity-0 pointer-events-none">
-                    <div class="bg-white p-6 rounded-xl w-full max-w-2xl modal-content">
-                        <div class="flex justify-between items-center mb-4">
-                            <h3 id="history-modal-title" class="font-bold text-lg">ประวัติการทำงาน</h3>
-                            <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600"><i data-lucide="x"></i></button>
-                        </div>
-                        <div id="history-modal-body"></div>
-                    </div>
-                </div>
-
-                <!-- Extend Time Modal -->
-                <div id="extendModal" class="modal fixed inset-0 bg-black/70 flex items-center justify-center z-50 opacity-0 pointer-events-none">
-                    <div class="bg-white p-6 rounded-xl w-80 modal-content">
-                        <h3 class="font-bold mb-4 text-blue-600">ขอต่อเวลาเพิ่ม</h3>
-                        <form onsubmit="handleExtendSubmit(event)" class="space-y-3">
-                            <div><label class="text-xs">สิ้นสุดวันที่</label><input type="date" id="extend-date" class="w-full border p-2 rounded" required></div>
-                            <div><label class="text-xs">เวลาใหม่</label><input type="time" id="extend-time" class="w-full border p-2 rounded" required></div>
-                            <div class="flex justify-end gap-2 mt-4">
-                                <button type="button" onclick="closeModal()" class="text-gray-500">ยกเลิก</button>
-                                <button class="bg-blue-600 text-white px-3 py-1 rounded">ยืนยัน</button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            `;
-        }
-
-        function confirmReject() {
-             const reason = document.getElementById('rejectReason').value;
-             if(!reason) return Swal.fire('กรุณาระบุเหตุผล');
-             api.action('put', `bookings/${modalData.id}`, { status: 'rejected', rejectionReason: reason }).then(()=>{ closeModal(); api.fetchData(); });
-        }
-
-        // Init
-        window.onload = () => {
-            renderApp();
-            if (state.currentUser) api.fetchData();
-        }
-
+        window.onload = () => { renderApp(); if(state.currentUser) api.fetchData(); };
     </script>
 </body>
 </html>
