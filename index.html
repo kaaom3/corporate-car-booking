@@ -109,7 +109,6 @@
         };
         let modalData = {};
         let bulkState = { selectedDates: new Set(), currentMonth: dayjs(), resourceType: null, resourceId: null, resourceName: null };
-        let autoRefreshInterval = null; // 🔥 NEW: For Auto Refresh
 
         // Load Session
         try { state.currentUser = JSON.parse(localStorage.getItem('carBookingUser')); } catch (e) { localStorage.clear(); }
@@ -117,17 +116,13 @@
         // API Wrapper
         const api = {
             login: (d) => axios.post(`${API_URL}/login`, d),
-            fetchData: async (bg = false) => { // bg = background fetch (no loading spinner if implemented)
+            fetchData: async () => {
                 try {
                     const [c, d, b] = await Promise.all([
                         axios.get(`${API_URL}/cars`).catch(()=>({data:[]})), 
                         axios.get(`${API_URL}/drivers`).catch(()=>({data:[]})), 
                         axios.get(`${API_URL}/bookings`).catch(()=>({data:[]}))
                     ]);
-                    
-                    // Check if data actually changed before re-rendering (Simple JSON check to avoid flickering)
-                    const newData = JSON.stringify({c:c.data, d:d.data, b:b.data});
-                    const oldData = JSON.stringify({c:state.cars, d:state.drivers, b:state.bookings});
                     
                     state.cars = c.data || []; 
                     state.drivers = d.data || []; 
@@ -141,8 +136,7 @@
                         state.users = u.data || []; 
                         state.stats = s.data || {};
                     }
-                    
-                    if (!bg || newData !== oldData) renderApp(); 
+                    renderApp(); 
                 } catch (e) { console.error("Fetch Error:", e); }
             },
             action: async (m, ep, d) => { 
@@ -158,27 +152,15 @@
         // --- RENDER MAIN ---
         function renderApp() {
             const app = document.getElementById('app');
-            // Preserve scroll position if refreshing in background
-            const scrollPos = window.scrollY;
-            
             app.innerHTML = '';
             
             if (!state.currentUser) {
                 renderLogin(app);
-                if(autoRefreshInterval) clearInterval(autoRefreshInterval);
             } else {
                 renderNavbar(app);
                 renderMainContent(app);
                 renderModals();
                 lucide.createIcons();
-                
-                // 🔥 RESTORE SCROLL
-                window.scrollTo(0, scrollPos);
-
-                // 🔥 START AUTO REFRESH (Every 10s)
-                if(!autoRefreshInterval) {
-                    autoRefreshInterval = setInterval(() => api.fetchData(true), 10000);
-                }
             }
         }
 
@@ -957,7 +939,6 @@
 
         // 🔥 FIX: Improved Logout
         function logout(){ 
-            if(autoRefreshInterval) clearInterval(autoRefreshInterval);
             localStorage.clear(); 
             state.currentUser = null; 
             renderApp(); 
