@@ -164,7 +164,7 @@
             }
         }
 
-        // 🔥 VANA NAVA THEMED LOGIN UI 🔥
+        // 🔥 VANA NAVA THEMED LOGIN UI
         function renderLogin(c) {
             c.innerHTML = `
             <div class="min-h-screen w-full flex items-center justify-center bg-blue-900 relative overflow-hidden fade-in">
@@ -266,11 +266,13 @@
             <nav class="bg-white shadow-sm px-6 py-3 flex flex-col md:flex-row justify-between items-center sticky top-0 z-40 border-b border-gray-100">
                 <div class="flex items-center gap-3 font-bold text-lg text-gray-800">
                     <div class="bg-gradient-to-tr from-blue-600 to-cyan-500 text-white p-2 rounded-lg shadow-sm"><i data-lucide="bus" class="w-5 h-5"></i></div> 
-                    <span>${state.currentUser.role==='admin'?'Admin Panel (Vana Nava)':'Booking Portal'}</span>
+                    <span>${state.currentUser.role==='admin'?'Admin Panel':'Booking Portal'}</span>
                 </div>
                 <div class="flex items-center gap-4 mt-2 md:mt-0">
+                    ${state.currentUser.role==='admin'?'<span class="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-xs font-bold border border-purple-200">🛡️ Admin Access</span>':''}
+                    <div class="h-6 w-px bg-gray-200 hidden md:block"></div>
                     <button onclick="openLineQR()" class="bg-[#06C755] hover:bg-[#05b34c] text-white px-4 py-1.5 rounded-full text-xs font-bold flex items-center gap-2 shadow-sm transition-all transform hover:scale-105">
-                        <i data-lucide="bell" class="w-4 h-4"></i> รับแจ้งเตือน LINE
+                        <i data-lucide="bell" class="w-4 h-4"></i> แจ้งเตือน LINE
                     </button>
                     <div class="h-6 w-px bg-gray-200"></div>
                     <div class="flex items-center gap-3">
@@ -289,9 +291,11 @@
             const main = document.createElement('div'); 
             main.className = "max-w-7xl mx-auto p-4 md:p-6 w-full fade-in pb-24";
             
+            // 🔥 UPDATE: Added 'booking' tab for Admin to book for themselves
             const tabs = state.currentUser.role === 'admin' 
                 ? [
                     {id:'dashboard', l:'ภาพรวม & จัดการ', i:'layout-dashboard'}, 
+                    {id:'booking', l:'จองรถ (ใช้เอง)', i:'plus-circle'}, // <-- New Tab for Admin
                     {id:'history', l:'ประวัติ & รายงาน', i:'file-text'}, 
                     {id:'calendar', l:'ปฏิทินงาน', i:'calendar'}, 
                     {id:'users', l:'ผู้ใช้งาน', i:'users'}
@@ -312,23 +316,23 @@
             </div>`;
             
             const content = document.createElement('div');
+            // 🔥 ROUTER LOGIC
             if(state.viewMode==='dashboard') state.currentUser.role==='admin'?renderAdminDashboard(content):renderUserDashboard(content);
+            else if(state.viewMode==='booking') renderUserDashboard(content); // <-- Admin uses User Dashboard here
             else if(state.viewMode==='history') renderHistoryView(content);
             else if(state.viewMode==='calendar') renderCalendar(content);
             else if(state.viewMode==='users') renderUserManagement(content);
+            
             main.appendChild(content); 
             c.appendChild(main);
 
             if(state.currentUser.role==='admin' && state.viewMode==='dashboard') setTimeout(renderCharts, 100);
         }
 
-        // --- DASHBOARDS (Admin/User) Functions ... (Same as provided before) ---
+        // --- DASHBOARDS (Admin/User) ---
         function renderAdminDashboard(c) {
             const pending = state.bookings.filter(b => b.status === 'pending');
-            // 🔥 Approved but not yet done/cancelled
             const approved = state.bookings.filter(b => b.status === 'approved'); 
-            
-            // Stats logic
             const today = dayjs();
             const todayJobs = state.bookings.filter(b => dayjs(b.startDate).isSame(today, 'day') && !['cancelled', 'rejected'].includes(b.status)).length;
             const activeCars = new Set(state.bookings.filter(b => b.status === 'active' && b.carId).map(b => b.carId._id || b.carId)).size;
@@ -417,7 +421,7 @@
                             }
                         </div>
 
-                        <!-- 🔥 Approved List (Editable) -->
+                        <!-- Approved List (Editable) -->
                         <div class="bg-white p-6 rounded-xl shadow-sm border">
                             <h3 class="font-bold mb-4 flex items-center gap-2 text-green-600"><i data-lucide="check-circle"></i> อนุมัติแล้ว / รอเดินทาง (${approved.length})</h3>
                             ${approved.length===0 
@@ -612,9 +616,9 @@
             </div>`;
         }
 
-        // --- VIEW: HISTORY & EDIT ---
+        // --- HISTORY & CALENDAR VIEWS ---
         function renderHistoryView(c) {
-            const list = state.bookings.sort((a,b)=>new Date(b.startDate)-new Date(a.startDate));
+             const list = state.bookings.sort((a,b)=>new Date(b.startDate)-new Date(a.startDate));
             c.innerHTML = `
             <div class="bg-white p-6 rounded-2xl shadow-sm border">
                 <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
@@ -698,7 +702,6 @@
                         <div class="flex-1 overflow-hidden space-y-1 px-1">
                             ${events.map(b => {
                                 let display = `${b.startTime} ${b.remarks}`;
-                                // 🔥 Improved Display for Maintenance
                                 if(b.status === 'maintenance') {
                                     const res = b.carId ? `🚘 ${b.carId.plate||b.carId.name}` : (b.driverId ? `👨‍✈️ ${b.driverId.name}` : '');
                                     display = `${res} [ปิด] ${b.remarks.replace('[ปิด]', '')}`;
@@ -748,15 +751,19 @@
                 </form>
                 <div class="overflow-x-auto rounded-xl border border-gray-200">
                     <table class="w-full text-sm text-left">
-                        <thead class="bg-gray-50 text-gray-500 font-bold text-xs uppercase"><tr><th class="p-4">User</th><th class="p-4">Name</th><th class="p-4">Dept</th><th class="p-4">Status</th><th class="p-4 text-right">Actions</th></tr></thead>
+                        <thead class="bg-gray-50 text-gray-500 font-bold text-xs uppercase"><tr><th class="p-4">User</th><th class="p-4">Name</th><th class="p-4">Role</th><th class="p-4">Status</th><th class="p-4 text-right">Actions</th></tr></thead>
                         <tbody>
                             ${state.users.map(u => `
                             <tr class="hover:bg-gray-50 transition ${!u.isActive?'bg-gray-100 opacity-60':''}">
                                 <td class="p-4 font-bold text-gray-700">${u.username}</td>
-                                <td class="p-4 text-gray-600">${u.firstName} ${u.lastName}</td>
-                                <td class="p-4"><span class="bg-purple-50 text-purple-700 px-2.5 py-1 rounded-md text-xs font-medium border border-purple-100">${u.department}</span></td>
+                                <td class="p-4 text-gray-600">${u.firstName} ${u.lastName} <br><span class="text-[10px] text-gray-400">${u.department}</span></td>
+                                <td class="p-4"><span class="px-2 py-1 rounded-md text-xs font-bold border ${u.role==='admin'?'bg-purple-100 text-purple-700 border-purple-200':'bg-gray-100 text-gray-600 border-gray-200'}">${u.role.toUpperCase()}</span></td>
                                 <td class="p-4">${u.lineUserId ? '<span class="text-green-600 flex gap-1 items-center font-bold text-xs"><i data-lucide="check-circle" class="w-3 h-3"></i> Linked</span>' : '<span class="text-gray-400 text-xs flex gap-1 items-center"><i data-lucide="circle" class="w-3 h-3"></i> Unlinked</span>'}</td>
                                 <td class="p-4 text-right flex justify-end gap-1">
+                                    <!-- 🔥 Toggle Role Button -->
+                                    <button onclick="toggleUserRole('${u._id}', '${u.role}')" class="bg-white border border-gray-200 text-purple-500 p-2 rounded-lg hover:bg-purple-50 hover:border-purple-300 transition" title="เปลี่ยน Role">
+                                        <i data-lucide="${u.role==='admin'?'shield-off':'shield'}" class="w-4 h-4"></i>
+                                    </button>
                                     <button onclick="openEditUserModal('${u._id}')" class="bg-white border border-gray-200 text-gray-500 p-2 rounded-lg hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition" title="แก้ไข"><i data-lucide="edit" class="w-4 h-4"></i></button>
                                     <button onclick="openResetPwdModal('${u._id}','${u.username}')" class="bg-white border border-gray-200 text-gray-500 p-2 rounded-lg hover:bg-yellow-50 hover:text-yellow-600 hover:border-yellow-200 transition" title="รีเซ็ตพาส"><i data-lucide="key" class="w-4 h-4"></i></button>
                                     <button onclick="toggleUser('${u._id}', ${u.isActive})" class="border p-1.5 rounded text-xs w-8 ${u.isActive?'text-green-600 border-green-200 bg-green-50':'text-gray-400 border-gray-300 hover:bg-gray-100'}" title="สถานะ">${u.isActive?'ON':'OFF'}</button>
@@ -770,235 +777,63 @@
             </div>`;
         }
 
-        // --- MODALS HTML ---
-        function renderModals() {
-            document.getElementById('modals-container').innerHTML = `
-                <!-- Change Pwd -->
-                <div id="changePwdModal" class="modal fixed inset-0 bg-black/70 flex items-center justify-center p-4"><div class="bg-white p-6 rounded-2xl w-full max-w-sm modal-content shadow-2xl"><h3 class="font-bold mb-4 text-lg">เปลี่ยนรหัสผ่านส่วนตัว</h3><form onsubmit="handleChangePwdSubmit(event)" class="space-y-4"><input type="password" name="oldPassword" placeholder="รหัสเดิม" class="w-full border p-3 rounded-lg bg-gray-50" required><input type="password" name="newPassword" placeholder="รหัสใหม่" class="w-full border p-3 rounded-lg bg-gray-50" required><div class="flex justify-end gap-3 mt-6"><button type="button" onclick="closeModal()" class="text-gray-500 hover:bg-gray-100 px-4 py-2 rounded-lg">ยกเลิก</button><button class="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold">ยืนยัน</button></div></form></div></div>
-                <!-- Reset Pwd Admin -->
-                <div id="resetPwdModal" class="modal fixed inset-0 bg-black/70 flex items-center justify-center p-4"><div class="bg-white p-6 rounded-2xl w-full max-w-sm modal-content shadow-2xl"><h3 class="font-bold mb-4 text-lg text-yellow-600 flex items-center gap-2"><i data-lucide="key"></i> รีเซ็ตรหัสผ่าน User</h3><form onsubmit="handleResetPwd(event)" class="space-y-4"><input type="password" name="password" placeholder="ตั้งรหัสผ่านใหม่ให้ User" class="w-full border p-3 rounded-lg bg-yellow-50 focus:ring-yellow-500 border-yellow-200" required><div class="flex justify-end gap-3 mt-6"><button type="button" onclick="closeModal()" class="text-gray-500 hover:bg-gray-100 px-4 py-2 rounded-lg transition">ยกเลิก</button><button class="bg-yellow-500 text-white px-6 py-2 rounded-lg font-bold hover:bg-yellow-600 shadow-md">รีเซ็ต</button></div></form></div></div>
-                <!-- Edit User -->
-                <div id="editUserModal" class="modal fixed inset-0 bg-black/70 flex items-center justify-center p-4"><div class="bg-white p-6 rounded-2xl w-full max-w-md modal-content shadow-2xl"><h3 class="font-bold mb-6 text-lg">แก้ไขข้อมูลผู้ใช้</h3><form onsubmit="handleEditUserSubmit(event)" class="space-y-4"><div class="grid grid-cols-2 gap-4"><input id="eu-fn" name="firstName" placeholder="ชื่อ" class="w-full border p-3 rounded-lg" required><input id="eu-ln" name="lastName" placeholder="สกุล" class="w-full border p-3 rounded-lg" required></div><select id="eu-dept" name="department" class="w-full border p-3 rounded-lg bg-white" required>${DEPARTMENTS.map(d=>`<option value="${d}">${d}</option>`).join('')}</select><input id="eu-email" name="email" placeholder="Email (ถ้ามี)" class="w-full border p-3 rounded-lg"><div class="flex justify-end gap-3 mt-6"><button type="button" onclick="closeModal()" class="text-gray-500 hover:text-gray-700 px-3 py-2">ยกเลิก</button><button class="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold">บันทึก</button></div></form></div></div>
-                <!-- Edit Booking -->
-                <div id="editBookingModal" class="modal fixed inset-0 bg-black/70 flex items-center justify-center p-4"><div class="bg-white p-6 rounded-2xl w-full max-w-md modal-content shadow-2xl"><h3 class="font-bold mb-6 text-blue-600 text-lg flex items-center gap-2"><i data-lucide="edit-3"></i> แก้ไขข้อมูลงานจอง</h3><form onsubmit="handleEditBookingSubmit(event)" class="space-y-4"><div><label class="text-xs font-bold text-gray-500">เปลี่ยนรถ</label><select id="eb-car" class="w-full border p-2.5 rounded-lg text-sm"></select></div><div><label class="text-xs font-bold text-gray-500">เปลี่ยนคนขับ</label><select id="eb-driver" class="w-full border p-2.5 rounded-lg text-sm"></select></div><div class="grid grid-cols-2 gap-4"><div><label class="text-xs font-bold text-gray-500">ไมล์เริ่ม</label><input type="number" id="eb-s-odo" class="w-full border p-2 rounded-lg text-sm"></div><div><label class="text-xs font-bold text-gray-500">ไมล์จบ</label><input type="number" id="eb-e-odo" class="w-full border p-2 rounded-lg text-sm"></div></div><div class="grid grid-cols-2 gap-4"><div><label class="text-xs font-bold text-gray-500">น้ำมัน (บาท)</label><input type="number" id="eb-fuel" class="w-full border p-2 rounded-lg text-sm"></div><div><label class="text-xs font-bold text-gray-500">ทางด่วน (บาท)</label><input type="number" id="eb-toll" class="w-full border p-2 rounded-lg text-sm"></div></div><div class="flex justify-end gap-3 mt-6"><button type="button" onclick="closeModal()" class="text-gray-500">ยกเลิก</button><button class="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold">บันทึกการแก้ไข</button></div></form></div></div>
-                <!-- 🔥 Bulk Maintenance Modal -->
-                <div id="bulkMaintenanceModal" class="modal fixed inset-0 bg-black/80 flex items-center justify-center p-4"><div class="bg-white p-6 rounded-2xl w-full max-w-2xl modal-content flex flex-col h-[90vh]"><div class="flex justify-between items-center mb-4"><h3 class="font-bold text-xl text-orange-600 flex items-center gap-2"><i data-lucide="calendar-off"></i> จัดการวันหยุด/ซ่อม</h3><button onclick="closeModal()" class="text-gray-400 hover:text-gray-600"><i data-lucide="x"></i></button></div><div class="flex items-center justify-between mb-4 bg-gray-50 p-2 rounded-lg"><button onclick="bulkState.currentMonth=bulkState.currentMonth.subtract(1,'month');renderBulkCalendar()" class="p-2 hover:bg-white rounded"><i data-lucide="chevron-left"></i></button><span id="bulk-month-label" class="font-bold text-lg"></span><button onclick="bulkState.currentMonth=bulkState.currentMonth.add(1,'month');renderBulkCalendar()" class="p-2 hover:bg-white rounded"><i data-lucide="chevron-right"></i></button></div><div class="grid grid-cols-7 gap-2 mb-2 text-center text-xs font-bold text-gray-500 uppercase"><div onclick="toggleBulkDayColumn(0)" class="bulk-header hover:text-orange-500">อา</div><div onclick="toggleBulkDayColumn(1)" class="bulk-header hover:text-orange-500">จ</div><div onclick="toggleBulkDayColumn(2)" class="bulk-header hover:text-orange-500">อ</div><div onclick="toggleBulkDayColumn(3)" class="bulk-header hover:text-orange-500">พ</div><div onclick="toggleBulkDayColumn(4)" class="bulk-header hover:text-orange-500">พฤ</div><div onclick="toggleBulkDayColumn(5)" class="bulk-header hover:text-orange-500">ศ</div><div onclick="toggleBulkDayColumn(6)" class="bulk-header hover:text-orange-500">ส</div></div><div id="bulk-calendar-grid" class="grid grid-cols-7 gap-2 flex-1 overflow-y-auto p-1"></div><div class="mt-4 pt-4 border-t space-y-3"><input id="bulk-remark" class="w-full border p-3 rounded-lg text-sm" placeholder="ระบุสาเหตุ (เช่น ปิดปรับปรุงประจำปี, ลาพักร้อน)"><div class="flex justify-end gap-3"><button onclick="closeModal()" class="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">ยกเลิก</button><button onclick="submitBulkMaintenance()" class="px-6 py-2 bg-orange-600 text-white rounded-lg font-bold hover:bg-orange-700">บันทึกการเปลี่ยนแปลง</button></div></div></div></div>
-            `;
-        }
-
-        // --- BULK LOGIC ---
-        function openBulkMaintenanceModal(type, id, name) {
-            bulkState = { ...bulkState, resourceType: type, resourceId: id, resourceName: name, selectedDates: new Set() };
-            // Pre-select dates
-            state.bookings.forEach(b => {
-                if (b.status === 'maintenance') {
-                    if ((type === 'car' && b.carId?._id === id) || (type === 'driver' && b.driverId?._id === id)) {
-                        bulkState.selectedDates.add(b.startDate);
-                    }
-                }
-            });
-            document.getElementById('bulk-remark').value = '';
-            renderBulkCalendar();
-            openModal('bulkMaintenanceModal');
-        }
-
-        function renderBulkCalendar() {
-            const start = bulkState.currentMonth.startOf('month').startOf('week');
-            const end = bulkState.currentMonth.endOf('month').endOf('week');
-            const grid = document.getElementById('bulk-calendar-grid');
-            document.getElementById('bulk-month-label').innerText = bulkState.currentMonth.format('MMMM YYYY');
-            grid.innerHTML = '';
-
-            let day = start;
-            while (day.isBefore(end)) {
-                const dateStr = day.format('YYYY-MM-DD');
-                const isSelected = bulkState.selectedDates.has(dateStr);
-                const isCurrentMonth = day.isSame(bulkState.currentMonth, 'month');
-                
-                const hasConflict = state.bookings.some(b => 
-                    b.status !== 'maintenance' && b.status !== 'cancelled' && b.status !== 'rejected' &&
-                    dayjs(b.startDate).isSame(day, 'day') &&
-                    ((bulkState.resourceType==='car' && b.carId?._id===bulkState.resourceId) || (bulkState.resourceType==='driver' && b.driverId?._id===bulkState.resourceId))
-                );
-
-                const el = document.createElement('div');
-                el.className = `bulk-day ${isSelected ? 'selected' : ''} ${hasConflict ? 'has-conflict' : ''} ${!isCurrentMonth ? 'opacity-30' : ''}`;
-                el.innerHTML = `<span class="text-sm">${day.date()}</span>${hasConflict ? '<div class="dot-indicator dot-conflict"></div>' : ''}`;
-                // 🔥 Allow selecting even if conflict exists (Admin Override)
-                el.onclick = () => toggleBulkDate(dateStr);
-                
-                grid.appendChild(el);
-                day = day.add(1, 'day');
-            }
-        }
-
-        function toggleBulkDate(dateStr) {
-            if (bulkState.selectedDates.has(dateStr)) bulkState.selectedDates.delete(dateStr);
-            else bulkState.selectedDates.add(dateStr);
-            renderBulkCalendar();
-        }
-
-        function toggleBulkDayColumn(dayIndex) {
-            let day = bulkState.currentMonth.startOf('month');
-            const end = bulkState.currentMonth.endOf('month');
-            while (day.day() !== dayIndex) day = day.add(1, 'day'); // Find first occurence
-
-            let allSelected = true;
-            const daysInCol = [];
-            while (day.isBefore(end) || day.isSame(end, 'day')) {
-                const ds = day.format('YYYY-MM-DD');
-                daysInCol.push(ds);
-                if (!bulkState.selectedDates.has(ds)) allSelected = false;
-                day = day.add(7, 'day');
-            }
-
-            daysInCol.forEach(d => {
-                // Allow bulk select regardless of conflict
-                if(allSelected) bulkState.selectedDates.delete(d);
-                else bulkState.selectedDates.add(d);
-            });
-            renderBulkCalendar();
-        }
-
-        async function submitBulkMaintenance() {
-            const remark = document.getElementById('bulk-remark').value || 'ปิดปรับปรุง';
-            const selectedArray = Array.from(bulkState.selectedDates);
-            const currentMaintenance = state.bookings.filter(b => 
-                b.status === 'maintenance' && 
-                ((bulkState.resourceType==='car' && b.carId?._id===bulkState.resourceId) || (bulkState.resourceType==='driver' && b.driverId?._id===bulkState.resourceId))
-            );
-            const currentDates = new Set(currentMaintenance.map(b => b.startDate));
-
-            const toAdd = selectedArray.filter(d => !currentDates.has(d));
-            const toRemove = currentMaintenance.filter(b => !bulkState.selectedDates.has(b.startDate));
-
-            try {
-                for (const b of toRemove) await api.action('delete', `bookings/${b._id}`);
-                for (const d of toAdd) {
-                    await api.action('post', 'bookings', {
-                        startDate: d, startTime: '00:00', endDate: d, endTime: '23:59',
-                        status: 'maintenance', remarks: `[ปิด] ${remark}`,
-                        userId: state.currentUser.username, // 🔥 FIX: Send correct admin ID
-                        carId: bulkState.resourceType==='car' ? bulkState.resourceId : null,
-                        driverId: bulkState.resourceType==='driver' ? bulkState.resourceId : null
-                    });
-                }
-                Swal.fire('Success', 'บันทึกข้อมูลเรียบร้อย', 'success');
-                closeModal();
-                api.fetchData();
-            } catch (e) { Swal.fire('Error', e.message, 'error'); }
-        }
-
-        // --- ACTIONS ---
+        // --- MODALS & ACTIONS ---
         async function checkAvail() { const sd=document.getElementById('sd').value, st=document.getElementById('st').value, ed=document.getElementById('ed').value, et=document.getElementById('et').value, badge=document.getElementById('avail-badge'); if(sd&&st&&ed&&et){const r=await api.action('post','check-availability',{startDate:sd,startTime:st,endDate:ed,endTime:et}); if(r.success){document.getElementById('cc').innerText=r.data.availableCars.length;document.getElementById('dc').innerText=r.data.availableDrivers.length;badge.classList.remove('hidden');}}else badge.classList.add('hidden'); }
+        async function submitBooking(e){ e.preventDefault(); const btn=e.target.querySelector('button'); const old=btn.innerHTML; btn.innerHTML='Saving...'; btn.disabled=true; const d=Object.fromEntries(new FormData(e.target)); d.useDriver=document.getElementById('ud').checked; const r=await api.action('post','bookings',d); if(r.success){Swal.fire('Success','จองสำเร็จ รออนุมัติ','success'); api.fetchData(); e.target.reset(); document.getElementById('avail-badge').classList.add('hidden');}else{Swal.fire('Error',r.message,'error');} btn.innerHTML=old; btn.disabled=false; }
         
-        async function submitBooking(e){ 
-            e.preventDefault(); 
-            const d = Object.fromEntries(new FormData(e.target)); 
-            d.useDriver = document.getElementById('ud').checked; 
+        async function toggleUserRole(id, currentRole) {
+            if (id === state.currentUser._id) return Swal.fire('Error', 'คุณไม่สามารถเปลี่ยนสิทธิ์ตัวเองได้', 'error');
+            const newRole = currentRole === 'admin' ? 'user' : 'admin';
+            const action = newRole === 'admin' ? 'Promote เป็น Admin' : 'Demote เป็น User';
             
-            // Show loading
-            const btn = e.target.querySelector('button');
-            const oldText = btn.innerHTML;
-            btn.innerHTML = 'กำลังบันทึก...';
-            btn.disabled = true;
-
-            const res = await api.action('post','bookings',d); 
-            
-            if (res.success) {
-                Swal.fire('Success', 'จองสำเร็จ! กรุณารอ Admin อนุมัติ', 'success');
+            if((await Swal.fire({title:`ยืนยัน ${action}?`, icon:'warning', showCancelButton:true})).isConfirmed){
+                await api.action('put', `users/${id}`, { role: newRole });
                 api.fetchData();
-                e.target.reset(); // Clear Form
-                document.getElementById('avail-badge').classList.add('hidden');
-            } else {
-                Swal.fire('Error', res.message || 'เกิดข้อผิดพลาดในการจอง', 'error');
+                Swal.fire('Success', 'อัปเดตสิทธิ์เรียบร้อย', 'success');
             }
-
-            btn.innerHTML = oldText;
-            btn.disabled = false;
         }
 
         async function approveBooking(id){ const c=document.getElementById(`c-${id}`).value, d=document.getElementById(`d-${id}`).value; if(!c)return Swal.fire('เลือกรถ'); await api.action('put',`bookings/${id}`,{status:'approved',carId:c,driverId:d}); api.fetchData(); }
-        
-        // 🔥 FIX: Add Reject Reason Popup
-        async function rejectBooking(id) {
-            const { value: reason } = await Swal.fire({
-                title: 'ระบุเหตุผลที่ปฏิเสธ',
-                input: 'text',
-                inputLabel: 'เหตุผล',
-                inputPlaceholder: 'เช่น รถเต็ม, รายละเอียดไม่ชัดเจน',
-                showCancelButton: true,
-                inputValidator: (value) => {
-                    if (!value) {
-                        return 'กรุณาระบุเหตุผล!'
-                    }
-                }
-            });
+        async function rejectBooking(id) { const { value: reason } = await Swal.fire({ title: 'ระบุเหตุผล', input: 'text', showCancelButton: true }); if (reason) { await api.action('put', `bookings/${id}`, { status: 'rejected', rejectionReason: reason }); api.fetchData(); } }
+        async function cancelBooking(id) { if((await Swal.fire({title:'ยืนยันยกเลิก?',showCancelButton:true})).isConfirmed){ await api.action('put', `bookings/${id}`, { status: 'cancelled', rejectionReason: 'User Cancelled', cancelledBy: state.currentUser.username }); api.fetchData(); } }
+        async function startTrip(id){ const b=state.bookings.find(x=>x._id===id); let co=0; if(b.carId){const r=await axios.get(`${API_URL}/cars`);const c=r.data.find(x=>x._id===(b.carId._id||b.carId));if(c)co=c.currentOdometer||0;} const {value:v}=await Swal.fire({title:'เริ่มเดินทาง',html:`<div class="mb-2">ไมล์ปัจจุบัน: <b>${co}</b></div><input id="sw1" type="number" class="swal2-input" value="${co}">`,preConfirm:()=>{const v=document.getElementById('sw1').value;if(v<co)Swal.showValidationMessage('ห้ามต่ำกว่าเดิม');return v;}}); if(v){await api.action('put',`bookings/${id}`,{status:'active',startOdometer:v});api.fetchData();} }
+        async function endTrip(id,so){ const {value:f}=await Swal.fire({title:'คืนรถ',html:`<input id="eo" placeholder="ไมล์จบ > ${so}" class="swal2-input"><input id="ef" placeholder="น้ำมัน" class="swal2-input"><input id="et" placeholder="ทางด่วน" class="swal2-input">`,preConfirm:()=>{return {endOdometer:document.getElementById('eo').value, fuelCost:document.getElementById('ef').value, tollCost:document.getElementById('et').value}}}); if(f){if(Number(f.endOdometer)<=Number(so))return Swal.fire('Error','ไมล์จบต้องมากกว่า','error'); await api.action('put',`bookings/${id}`,{status:'completed',...f});api.fetchData();} }
 
-            if (reason) {
-                await api.action('put', `bookings/${id}`, { status: 'rejected', rejectionReason: reason });
-                api.fetchData();
-            }
-        }
-
-        // 🔥 FIX: Add Cancel Booking Function
-        async function cancelBooking(id) {
-            const result = await Swal.fire({
-                title: 'ยืนยันการยกเลิก?',
-                text: "คุณต้องการยกเลิกการจองนี้ใช่หรือไม่",
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonColor: '#d33',
-                cancelButtonColor: '#3085d6',
-                confirmButtonText: 'ใช่, ยกเลิกเลย'
-            });
-
-            if (result.isConfirmed) {
-                // ส่ง cancelledBy และ rejectionReason เพื่อให้ระบบบันทึก
-                await api.action('put', `bookings/${id}`, {
-                    status: 'cancelled',
-                    rejectionReason: 'ผู้ใช้ยกเลิกเอง',
-                    cancelledBy: state.currentUser.username
-                });
-                api.fetchData();
-                Swal.fire('ยกเลิกแล้ว', 'รายการจองถูกยกเลิกเรียบร้อย', 'success');
-            }
-        }
-
-        async function startTrip(id){ const b=state.bookings.find(x=>x._id===id); let co=0; if(b.carId){const r=await axios.get(`${API_URL}/cars`);const c=r.data.find(x=>x._id===(b.carId._id||b.carId));if(c)co=c.currentOdometer||0;} const {value:v}=await Swal.fire({title:'เริ่มเดินทาง',html:`<div class="text-left bg-blue-50 p-3 rounded mb-2">ไมล์ปัจจุบัน: <b>${co.toLocaleString()}</b></div><input id="sw1" type="number" class="swal2-input" value="${co}">`,preConfirm:()=>{const v=document.getElementById('sw1').value;if(v<co)Swal.showValidationMessage('ห้ามต่ำกว่าเดิม');return v;}}); if(v){await api.action('put',`bookings/${id}`,{status:'active',startOdometer:v});api.fetchData();} }
-        async function endTrip(id,so){ const {value:f}=await Swal.fire({title:'คืนรถ',html:`<input id="eo" placeholder="เลขไมล์จบ > ${so}" class="swal2-input"><input id="ef" placeholder="น้ำมัน" class="swal2-input"><input id="et" placeholder="ทางด่วน" class="swal2-input">`,preConfirm:()=>{return {endOdometer:document.getElementById('eo').value, fuelCost:document.getElementById('ef').value, tollCost:document.getElementById('et').value}}}); if(f){if(Number(f.endOdometer)<=Number(so))return Swal.fire('Error','ไมล์จบต้องมากกว่า','error'); await api.action('put',`bookings/${id}`,{status:'completed',...f});api.fetchData();} }
+        // Resource Mgmt Wrappers
         async function addResource(e,t){ e.preventDefault(); await api.action('post',t,Object.fromEntries(new FormData(e.target))); api.fetchData(); e.target.reset(); }
-        async function deleteResource(t,id){ if((await Swal.fire({title:'ยืนยันลบ?',showCancelButton:true,confirmButtonColor:'#ef4444'})).isConfirmed){ await api.action('delete',`${t}/${id}`); api.fetchData(); } }
+        async function deleteResource(t,id){ if((await Swal.fire({title:'ยืนยันลบ?',showCancelButton:true})).isConfirmed){ await api.action('delete',`${t}/${id}`); api.fetchData(); } }
         async function addUser(e){ e.preventDefault(); await api.action('post','users',Object.fromEntries(new FormData(e.target))); api.fetchData(); e.target.reset(); }
         
+        // Modals Logic
         function openEditUserModal(id){ const u=state.users.find(x=>x._id===id); modalData=u; document.getElementById('eu-fn').value=u.firstName; document.getElementById('eu-ln').value=u.lastName; document.getElementById('eu-dept').value=u.department; document.getElementById('eu-email').value=u.email; openModal('editUserModal'); }
         async function handleEditUserSubmit(e){ e.preventDefault(); await api.action('put',`users/${modalData._id}`,Object.fromEntries(new FormData(e.target))); closeModal(); api.fetchData(); }
         function openResetPwdModal(id,u){ modalData={id,username:u}; openModal('resetPwdModal'); }
         async function handleResetPwd(e){ e.preventDefault(); await api.action('put',`users/${modalData.id}`,{password:new FormData(e.target).get('password')}); closeModal(); Swal.fire('Success'); }
         async function toggleUser(id, curr){ await api.action('put',`users/${id}`,{isActive:!curr}); api.fetchData(); }
         async function unlinkLine(id){ if((await Swal.fire({title:'Unlink?',showCancelButton:true})).isConfirmed){ await api.action('put',`users/${id}`,{resetLine:true}); api.fetchData(); } }
-        
         function openEditBookingModal(id){ const b=state.bookings.find(x=>x._id===id); modalData=b; document.getElementById('eb-car').innerHTML='<option value="">--</option>'+state.cars.map(c=>`<option value="${c._id}" ${b.carId?._id===c._id?'selected':''}>${c.name}</option>`).join(''); document.getElementById('eb-driver').innerHTML='<option value="">--</option>'+state.drivers.map(d=>`<option value="${d._id}" ${b.driverId?._id===d._id?'selected':''}>${d.name}</option>`).join(''); document.getElementById('eb-s-odo').value=b.startOdometer||0; document.getElementById('eb-e-odo').value=b.endOdometer||0; document.getElementById('eb-fuel').value=b.fuelCost||0; document.getElementById('eb-toll').value=b.tollCost||0; openModal('editBookingModal'); }
         async function handleEditBookingSubmit(e){ e.preventDefault(); const d={carId:document.getElementById('eb-car').value||null, driverId:document.getElementById('eb-driver').value||null, startOdometer:document.getElementById('eb-s-odo').value, endOdometer:document.getElementById('eb-e-odo').value, fuelCost:document.getElementById('eb-fuel').value, tollCost:document.getElementById('eb-toll').value}; await api.action('put',`bookings/${modalData._id}`,d); closeModal(); Swal.fire('Updated'); api.fetchData(); }
 
-        function logout(){ 
-            localStorage.clear(); 
-            state.currentUser = null; 
-            renderApp(); 
-        }
-        function openLineQR(){ if(!state.currentUser?._id) return Swal.fire('Error','User ID not found','error'); api.action('post','generate-link-token',{userId:state.currentUser._id}).then(r=>{if(r.success)Swal.fire({title:'LINE Connect',html:`<div class="flex justify-center"><img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`https://line.me/R/oaMessage/${LINE_BOT_ID}/?!link ${r.data.token}`)}"></div>`});}); }
-        function exportCSV(){ const csv="\uFEFFDate,User,Car,Driver,Start,End,Fuel,Toll\n"+state.bookings.map(b=>`${b.startDate},"${b.userId}","${b.carId?.name||'-'}","${b.driverId?.name||'-'}",${b.startOdometer||0},${b.endOdometer||0},${b.fuelCost||0},${b.tollCost||0}`).join('\n'); const a=document.createElement('a'); a.href='data:text/csv;charset=utf-8,'+encodeURI(csv); a.download='report.csv'; a.click(); }
-        function changeMonth(n){ state.currentDate=dayjs(state.currentDate).add(n,'month').toDate(); renderApp(); }
-        
+        // Bulk & Utils
+        function openBulkMaintenanceModal(type, id, name) { bulkState={...bulkState, resourceType:type, resourceId:id, resourceName:name, selectedDates:new Set()}; state.bookings.forEach(b=>{if(b.status==='maintenance' && ((type==='car' && b.carId?._id===id) || (type==='driver' && b.driverId?._id===id))) bulkState.selectedDates.add(b.startDate)}); document.getElementById('bulk-remark').value=''; renderBulkCalendar(); openModal('bulkMaintenanceModal'); }
+        function renderBulkCalendar() { const start=bulkState.currentMonth.startOf('month').startOf('week'), end=bulkState.currentMonth.endOf('month').endOf('week'), grid=document.getElementById('bulk-calendar-grid'); document.getElementById('bulk-month-label').innerText=bulkState.currentMonth.format('MMMM YYYY'); grid.innerHTML=''; let day=start; while(day.isBefore(end)){ const ds=day.format('YYYY-MM-DD'); const isSel=bulkState.selectedDates.has(ds); const isCurr=day.isSame(bulkState.currentMonth,'month'); const conflict=state.bookings.some(b=>b.status!=='maintenance'&&b.status!=='cancelled'&&dayjs(b.startDate).isSame(day,'day')&&((bulkState.resourceType==='car'&&b.carId?._id===bulkState.resourceId)||(bulkState.resourceType==='driver'&&b.driverId?._id===bulkState.resourceId))); const el=document.createElement('div'); el.className=`bulk-day ${isSel?'selected':''} ${conflict?'has-conflict':''} ${!isCurr?'opacity-30':''}`; el.innerHTML=`<span class="text-sm">${day.date()}</span>${conflict?'<div class="dot-indicator dot-conflict"></div>':''}`; el.onclick=()=>toggleBulkDate(ds); grid.appendChild(el); day=day.add(1,'day'); } }
+        function toggleBulkDate(d){ if(bulkState.selectedDates.has(d)) bulkState.selectedDates.delete(d); else bulkState.selectedDates.add(d); renderBulkCalendar(); }
+        function toggleBulkDayColumn(idx){ let d=bulkState.currentMonth.startOf('month'); while(d.day()!==idx) d=d.add(1,'day'); let all=true, days=[]; while(d.isSame(bulkState.currentMonth,'month')||d.isBefore(bulkState.currentMonth.endOf('month'))){ const s=d.format('YYYY-MM-DD'); days.push(s); if(!bulkState.selectedDates.has(s)) all=false; d=d.add(7,'day'); } days.forEach(x=>{if(all)bulkState.selectedDates.delete(x);else bulkState.selectedDates.add(x)}); renderBulkCalendar(); }
+        async function submitBulkMaintenance(){ const rem=document.getElementById('bulk-remark').value||'ปิดปรับปรุง'; const sel=Array.from(bulkState.selectedDates); const curr=state.bookings.filter(b=>b.status==='maintenance'&&((bulkState.resourceType==='car'&&b.carId?._id===bulkState.resourceId)||(bulkState.resourceType==='driver'&&b.driverId?._id===bulkState.resourceId))); const currDs=new Set(curr.map(b=>b.startDate)); const add=sel.filter(d=>!currDs.has(d)), rems=curr.filter(b=>!bulkState.selectedDates.has(b.startDate)); try { for(const b of rems) await api.action('delete',`bookings/${b._id}`); for(const d of add) await api.action('post','bookings',{startDate:d,startTime:'00:00',endDate:d,endTime:'23:59',status:'maintenance',remarks:`[ปิด] ${rem}`,userId:state.currentUser.username,carId:bulkState.resourceType==='car'?bulkState.resourceId:null,driverId:bulkState.resourceType==='driver'?bulkState.resourceId:null}); Swal.fire('Success'); closeModal(); api.fetchData(); } catch(e){Swal.fire('Error',e.message,'error');} }
+
+        // 🔥 FIX: Restored Full Version of showBookingDetails
         function showBookingDetails(id) {
             const b = state.bookings.find(x => x._id === id);
             if(!b) return;
-            const car = state.cars.find(c => c._id === b.carId) || {name: '-', plate: '-'};
-            const carName = b.carId?.name || car.name || '-';
-            const carPlate = b.carId?.plate || car.plate || '-';
-            const driver = state.drivers.find(d => d._id === b.driverId) || {name: '-', phone: '-'};
-            const driverName = b.driverId?.name || driver.name || '-';
-            const driverPhone = b.driverId?.phone || driver.phone || '-';
+            // Handle populated objects or string IDs
+            const car = (b.carId && b.carId.name) ? b.carId : (state.cars.find(c => c._id === b.carId) || {name: '-', plate: '-'});
+            const carName = car.name || '-';
+            const carPlate = car.plate || '-';
+            
+            const driver = (b.driverId && b.driverId.name) ? b.driverId : (state.drivers.find(d => d._id === b.driverId) || {name: '-', phone: '-'});
+            const driverName = driver.name || '-';
+            const driverPhone = driver.phone || '-';
+            
             const user = state.users.find(u => u.username === b.userId) || {firstName: b.userId, lastName: '', department: '-'};
             const formatDate = (d) => dayjs(d).format('DD MMM BBBB');
             
@@ -1085,24 +920,25 @@
             });
         }
 
+        function logout(){ localStorage.clear(); state.currentUser=null; renderApp(); }
+        function openLineQR(){ if(!state.currentUser?._id) return Swal.fire('Error','User ID not found','error'); api.action('post','generate-link-token',{userId:state.currentUser._id}).then(r=>{if(r.success)Swal.fire({title:'Scan to Link',html:`<img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`https://line.me/R/oaMessage/${LINE_BOT_ID}/?!link ${r.data.token}`)}" class="mx-auto">`})}); }
+        function exportCSV(){ const csv="\uFEFFDate,User,Car,Driver,Start,End,Fuel,Toll\n"+state.bookings.map(b=>`${b.startDate},"${b.userId}","${b.carId?.name||'-'}","${b.driverId?.name||'-'}",${b.startOdometer||0},${b.endOdometer||0},${b.fuelCost||0},${b.tollCost||0}`).join('\n'); const a=document.createElement('a'); a.href='data:text/csv;charset=utf-8,'+encodeURI(csv); a.download='report.csv'; a.click(); }
+        function changeMonth(n){ state.currentDate=dayjs(state.currentDate).add(n,'month').toDate(); renderApp(); }
         function openModal(id){ document.getElementById(id).classList.add('show'); }
         function closeModal(){ document.querySelectorAll('.modal').forEach(e=>e.classList.remove('show')); }
-        async function handleChangePwdSubmit(e){ e.preventDefault(); await api.action('post','change-password',{userId:state.currentUser.id,...Object.fromEntries(new FormData(e.target))}); closeModal(); Swal.fire('Success'); }
-        
-        function renderCharts() { 
-            if(!state.stats) return;
-            const render = (id, type, labels, data, colors, horizontal=false) => {
-                const ctx = document.getElementById(id);
-                if (ctx) {
-                    Chart.getChart(ctx)?.destroy();
-                    new Chart(ctx, { type, data: { labels, datasets: [{ label: 'จำนวนงาน', data, backgroundColor: colors, borderRadius: 6 }] }, options: { indexAxis: horizontal ? 'y' : 'x', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: type === 'doughnut' } } } });
-                }
-            };
-            const carStats = state.stats.carStats || []; render('carChart', 'bar', carStats.map(x=>x.name), carStats.map(x=>x.count), '#3b82f6');
-            const driverStats = state.stats.driverStats || []; render('driverChart', 'bar', driverStats.map(x=>x.name), driverStats.map(x=>x.count), '#10b981', true);
-            const deptStats = state.stats.deptStats || []; render('deptChart', 'doughnut', deptStats.map(x=>x.name), deptStats.map(x=>x.count), ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6']);
-        }
+        function renderCharts() { if(!state.stats)return; const ctx1=document.getElementById('carChart'), ctx2=document.getElementById('driverChart'), ctx3=document.getElementById('deptChart'); if(ctx1){Chart.getChart(ctx1)?.destroy();new Chart(ctx1,{type:'bar',data:{labels:state.stats.carStats.map(x=>x.name),datasets:[{label:'Trip',data:state.stats.carStats.map(x=>x.count),backgroundColor:'#3b82f6'}]}});} if(ctx2){Chart.getChart(ctx2)?.destroy();new Chart(ctx2,{type:'bar',data:{labels:state.stats.driverStats.map(x=>x.name),datasets:[{label:'Trip',data:state.stats.driverStats.map(x=>x.count),backgroundColor:'#10b981'}]},options:{indexAxis:'y'}});} if(ctx3){Chart.getChart(ctx3)?.destroy();new Chart(ctx3,{type:'doughnut',data:{labels:state.stats.deptStats.map(x=>x.name),datasets:[{data:state.stats.deptStats.map(x=>x.count),backgroundColor:['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6']}]}});} }
+        async function handleChangePwdSubmit(e){ e.preventDefault(); await api.action('post','change-password',{userId:state.currentUser._id,...Object.fromEntries(new FormData(e.target))}); closeModal(); Swal.fire('Success'); }
 
+        // Render Modals
+        function renderModals() {
+            document.getElementById('modals-container').innerHTML = `
+            <div id="changePwdModal" class="modal fixed inset-0 bg-black/70 flex items-center justify-center p-4"><div class="bg-white p-6 rounded-2xl w-full max-w-sm modal-content shadow-2xl"><h3 class="font-bold mb-4 text-lg">เปลี่ยนรหัสผ่าน</h3><form onsubmit="handleChangePwdSubmit(event)" class="space-y-4"><input type="password" name="oldPassword" placeholder="รหัสเดิม" class="w-full border p-3 rounded-lg bg-gray-50" required><input type="password" name="newPassword" placeholder="รหัสใหม่" class="w-full border p-3 rounded-lg bg-gray-50" required><div class="flex justify-end gap-3 mt-6"><button type="button" onclick="closeModal()" class="text-gray-500 hover:bg-gray-100 px-4 py-2 rounded-lg">ยกเลิก</button><button class="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold">ยืนยัน</button></div></form></div></div>
+            <div id="resetPwdModal" class="modal fixed inset-0 bg-black/70 flex items-center justify-center p-4"><div class="bg-white p-6 rounded-2xl w-full max-w-sm modal-content shadow-2xl"><h3 class="font-bold mb-4 text-lg text-yellow-600">รีเซ็ตรหัสผ่าน User</h3><form onsubmit="handleResetPwd(event)" class="space-y-4"><input type="password" name="password" placeholder="ตั้งรหัสผ่านใหม่" class="w-full border p-3 rounded-lg bg-yellow-50" required><div class="flex justify-end gap-3 mt-6"><button type="button" onclick="closeModal()" class="text-gray-500">ยกเลิก</button><button class="bg-yellow-500 text-white px-6 py-2 rounded-lg font-bold">รีเซ็ต</button></div></form></div></div>
+            <div id="editUserModal" class="modal fixed inset-0 bg-black/70 flex items-center justify-center p-4"><div class="bg-white p-6 rounded-2xl w-full max-w-md modal-content shadow-2xl"><h3 class="font-bold mb-6 text-lg">แก้ไขข้อมูลผู้ใช้</h3><form onsubmit="handleEditUserSubmit(event)" class="space-y-4"><div class="grid grid-cols-2 gap-4"><input id="eu-fn" name="firstName" placeholder="ชื่อ" class="w-full border p-3 rounded-lg" required><input id="eu-ln" name="lastName" placeholder="สกุล" class="w-full border p-3 rounded-lg" required></div><select id="eu-dept" name="department" class="w-full border p-3 rounded-lg bg-white" required>${DEPARTMENTS.map(d=>`<option value="${d}">${d}</option>`).join('')}</select><input id="eu-email" name="email" placeholder="Email" class="w-full border p-3 rounded-lg"><div class="flex justify-end gap-3 mt-6"><button type="button" onclick="closeModal()" class="text-gray-500">ยกเลิก</button><button class="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold">บันทึก</button></div></form></div></div>
+            <div id="editBookingModal" class="modal fixed inset-0 bg-black/70 flex items-center justify-center p-4"><div class="bg-white p-6 rounded-2xl w-full max-w-md modal-content shadow-2xl"><h3 class="font-bold mb-6 text-blue-600 text-lg">แก้ไขข้อมูลงานจอง</h3><form onsubmit="handleEditBookingSubmit(event)" class="space-y-4"><div><label class="text-xs font-bold text-gray-500">เปลี่ยนรถ</label><select id="eb-car" class="w-full border p-2.5 rounded-lg text-sm"></select></div><div><label class="text-xs font-bold text-gray-500">เปลี่ยนคนขับ</label><select id="eb-driver" class="w-full border p-2.5 rounded-lg text-sm"></select></div><div class="grid grid-cols-2 gap-4"><div><label class="text-xs font-bold text-gray-500">ไมล์เริ่ม</label><input type="number" id="eb-s-odo" class="w-full border p-2 rounded-lg text-sm"></div><div><label class="text-xs font-bold text-gray-500">ไมล์จบ</label><input type="number" id="eb-e-odo" class="w-full border p-2 rounded-lg text-sm"></div></div><div class="grid grid-cols-2 gap-4"><div><label class="text-xs font-bold text-gray-500">น้ำมัน</label><input type="number" id="eb-fuel" class="w-full border p-2 rounded-lg text-sm"></div><div><label class="text-xs font-bold text-gray-500">ทางด่วน</label><input type="number" id="eb-toll" class="w-full border p-2 rounded-lg text-sm"></div></div><div class="flex justify-end gap-3 mt-6"><button type="button" onclick="closeModal()" class="text-gray-500">ยกเลิก</button><button class="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold">บันทึก</button></div></form></div></div>
+            <div id="bulkMaintenanceModal" class="modal fixed inset-0 bg-black/80 flex items-center justify-center p-4"><div class="bg-white p-6 rounded-2xl w-full max-w-2xl modal-content flex flex-col h-[90vh]"><div class="flex justify-between items-center mb-4"><h3 class="font-bold text-xl text-orange-600">จัดการวันหยุด/ซ่อม</h3><button onclick="closeModal()" class="text-gray-400 hover:text-gray-600"><i data-lucide="x"></i></button></div><div class="flex items-center justify-between mb-4 bg-gray-50 p-2 rounded-lg"><button onclick="bulkState.currentMonth=bulkState.currentMonth.subtract(1,'month');renderBulkCalendar()" class="p-2 hover:bg-white rounded"><i data-lucide="chevron-left"></i></button><span id="bulk-month-label" class="font-bold text-lg"></span><button onclick="bulkState.currentMonth=bulkState.currentMonth.add(1,'month');renderBulkCalendar()" class="p-2 hover:bg-white rounded"><i data-lucide="chevron-right"></i></button></div><div class="grid grid-cols-7 gap-2 mb-2 text-center text-xs font-bold text-gray-500 uppercase"><div onclick="toggleBulkDayColumn(0)" class="bulk-header">อา</div><div onclick="toggleBulkDayColumn(1)" class="bulk-header">จ</div><div onclick="toggleBulkDayColumn(2)" class="bulk-header">อ</div><div onclick="toggleBulkDayColumn(3)" class="bulk-header">พ</div><div onclick="toggleBulkDayColumn(4)" class="bulk-header">พฤ</div><div onclick="toggleBulkDayColumn(5)" class="bulk-header">ศ</div><div onclick="toggleBulkDayColumn(6)" class="bulk-header">ส</div></div><div id="bulk-calendar-grid" class="grid grid-cols-7 gap-2 flex-1 overflow-y-auto p-1"></div><div class="mt-4 pt-4 border-t space-y-3"><input id="bulk-remark" class="w-full border p-3 rounded-lg text-sm" placeholder="สาเหตุ"><div class="flex justify-end gap-3"><button onclick="closeModal()" class="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">ยกเลิก</button><button onclick="submitBulkMaintenance()" class="px-6 py-2 bg-orange-600 text-white rounded-lg font-bold">บันทึก</button></div></div></div></div>`;
+        }
+        
         window.onload = () => { renderApp(); if(state.currentUser) api.fetchData(); };
     </script>
 </body>
