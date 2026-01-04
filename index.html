@@ -892,7 +892,6 @@
         // --- ACTIONS ---
         async function checkAvail() { const sd=document.getElementById('sd').value, st=document.getElementById('st').value, ed=document.getElementById('ed').value, et=document.getElementById('et').value, badge=document.getElementById('avail-badge'); if(sd&&st&&ed&&et){const r=await api.action('post','check-availability',{startDate:sd,startTime:st,endDate:ed,endTime:et}); if(r.success){document.getElementById('cc').innerText=r.data.availableCars.length;document.getElementById('dc').innerText=r.data.availableDrivers.length;badge.classList.remove('hidden');}}else badge.classList.add('hidden'); }
         
-        // 🔥🔥 BUG FIX: Added Check for Success/Fail
         async function submitBooking(e){ 
             e.preventDefault(); 
             const d = Object.fromEntries(new FormData(e.target)); 
@@ -920,7 +919,52 @@
         }
 
         async function approveBooking(id){ const c=document.getElementById(`c-${id}`).value, d=document.getElementById(`d-${id}`).value; if(!c)return Swal.fire('เลือกรถ'); await api.action('put',`bookings/${id}`,{status:'approved',carId:c,driverId:d}); api.fetchData(); }
-        async function rejectBooking(id){ await api.action('put',`bookings/${id}`,{status:'rejected'}); api.fetchData(); }
+        
+        // 🔥 FIX: Add Reject Reason Popup
+        async function rejectBooking(id) {
+            const { value: reason } = await Swal.fire({
+                title: 'ระบุเหตุผลที่ปฏิเสธ',
+                input: 'text',
+                inputLabel: 'เหตุผล',
+                inputPlaceholder: 'เช่น รถเต็ม, รายละเอียดไม่ชัดเจน',
+                showCancelButton: true,
+                inputValidator: (value) => {
+                    if (!value) {
+                        return 'กรุณาระบุเหตุผล!'
+                    }
+                }
+            });
+
+            if (reason) {
+                await api.action('put', `bookings/${id}`, { status: 'rejected', rejectionReason: reason });
+                api.fetchData();
+            }
+        }
+
+        // 🔥 FIX: Add Cancel Booking Function
+        async function cancelBooking(id) {
+            const result = await Swal.fire({
+                title: 'ยืนยันการยกเลิก?',
+                text: "คุณต้องการยกเลิกการจองนี้ใช่หรือไม่",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#3085d6',
+                confirmButtonText: 'ใช่, ยกเลิกเลย'
+            });
+
+            if (result.isConfirmed) {
+                // ส่ง cancelledBy และ rejectionReason เพื่อให้ระบบบันทึก
+                await api.action('put', `bookings/${id}`, {
+                    status: 'cancelled',
+                    rejectionReason: 'ผู้ใช้ยกเลิกเอง',
+                    cancelledBy: state.currentUser.username
+                });
+                api.fetchData();
+                Swal.fire('ยกเลิกแล้ว', 'รายการจองถูกยกเลิกเรียบร้อย', 'success');
+            }
+        }
+
         async function startTrip(id){ const b=state.bookings.find(x=>x._id===id); let co=0; if(b.carId){const r=await axios.get(`${API_URL}/cars`);const c=r.data.find(x=>x._id===(b.carId._id||b.carId));if(c)co=c.currentOdometer||0;} const {value:v}=await Swal.fire({title:'เริ่มเดินทาง',html:`<div class="text-left bg-blue-50 p-3 rounded mb-2">ไมล์ปัจจุบัน: <b>${co.toLocaleString()}</b></div><input id="sw1" type="number" class="swal2-input" value="${co}">`,preConfirm:()=>{const v=document.getElementById('sw1').value;if(v<co)Swal.showValidationMessage('ห้ามต่ำกว่าเดิม');return v;}}); if(v){await api.action('put',`bookings/${id}`,{status:'active',startOdometer:v});api.fetchData();} }
         async function endTrip(id,so){ const {value:f}=await Swal.fire({title:'คืนรถ',html:`<input id="eo" placeholder="เลขไมล์จบ > ${so}" class="swal2-input"><input id="ef" placeholder="น้ำมัน" class="swal2-input"><input id="et" placeholder="ทางด่วน" class="swal2-input">`,preConfirm:()=>{return {endOdometer:document.getElementById('eo').value, fuelCost:document.getElementById('ef').value, tollCost:document.getElementById('et').value}}}); if(f){if(Number(f.endOdometer)<=Number(so))return Swal.fire('Error','ไมล์จบต้องมากกว่า','error'); await api.action('put',`bookings/${id}`,{status:'completed',...f});api.fetchData();} }
         async function addResource(e,t){ e.preventDefault(); await api.action('post',t,Object.fromEntries(new FormData(e.target))); api.fetchData(); e.target.reset(); }
@@ -937,13 +981,11 @@
         function openEditBookingModal(id){ const b=state.bookings.find(x=>x._id===id); modalData=b; document.getElementById('eb-car').innerHTML='<option value="">--</option>'+state.cars.map(c=>`<option value="${c._id}" ${b.carId?._id===c._id?'selected':''}>${c.name}</option>`).join(''); document.getElementById('eb-driver').innerHTML='<option value="">--</option>'+state.drivers.map(d=>`<option value="${d._id}" ${b.driverId?._id===d._id?'selected':''}>${d.name}</option>`).join(''); document.getElementById('eb-s-odo').value=b.startOdometer||0; document.getElementById('eb-e-odo').value=b.endOdometer||0; document.getElementById('eb-fuel').value=b.fuelCost||0; document.getElementById('eb-toll').value=b.tollCost||0; openModal('editBookingModal'); }
         async function handleEditBookingSubmit(e){ e.preventDefault(); const d={carId:document.getElementById('eb-car').value||null, driverId:document.getElementById('eb-driver').value||null, startOdometer:document.getElementById('eb-s-odo').value, endOdometer:document.getElementById('eb-e-odo').value, fuelCost:document.getElementById('eb-fuel').value, tollCost:document.getElementById('eb-toll').value}; await api.action('put',`bookings/${modalData._id}`,d); closeModal(); Swal.fire('Updated'); api.fetchData(); }
 
-        // 🔥 FIX: Improved Logout
         function logout(){ 
             localStorage.clear(); 
             state.currentUser = null; 
             renderApp(); 
         }
-        // 🔥 FIX: LINE Connect
         function openLineQR(){ if(!state.currentUser?._id) return Swal.fire('Error','User ID not found','error'); api.action('post','generate-link-token',{userId:state.currentUser._id}).then(r=>{if(r.success)Swal.fire({title:'LINE Connect',html:`<div class="flex justify-center"><img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`https://line.me/R/oaMessage/${LINE_BOT_ID}/?!link ${r.data.token}`)}"></div>`});}); }
         function exportCSV(){ const csv="\uFEFFDate,User,Car,Driver,Start,End,Fuel,Toll\n"+state.bookings.map(b=>`${b.startDate},"${b.userId}","${b.carId?.name||'-'}","${b.driverId?.name||'-'}",${b.startOdometer||0},${b.endOdometer||0},${b.fuelCost||0},${b.tollCost||0}`).join('\n'); const a=document.createElement('a'); a.href='data:text/csv;charset=utf-8,'+encodeURI(csv); a.download='report.csv'; a.click(); }
         function changeMonth(n){ state.currentDate=dayjs(state.currentDate).add(n,'month').toDate(); renderApp(); }
