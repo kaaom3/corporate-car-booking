@@ -99,7 +99,8 @@
         // Global State
         const state = { 
             currentUser: null, 
-            viewMode: 'dashboard', 
+            viewMode: 'dashboard',
+            historyFilter: 'trips', 
             bookings: [], 
             cars: [], 
             drivers: [], 
@@ -261,7 +262,6 @@
             lucide.createIcons();
         }
 
-        // 🔥 MODIFIED: Removed LINE Button
         function renderNavbar(c) {
             c.innerHTML += `
             <nav class="bg-white shadow-sm px-6 py-3 flex flex-col md:flex-row justify-between items-center sticky top-0 z-40 border-b border-gray-100">
@@ -291,7 +291,6 @@
             const main = document.createElement('div'); 
             main.className = "max-w-7xl mx-auto p-4 md:p-6 w-full fade-in pb-24";
             
-            // 🔥 UPDATE: Added 'booking' tab for Admin
             const tabs = state.currentUser.role === 'admin' 
                 ? [
                     {id:'dashboard', l:'ภาพรวม & จัดการ', i:'layout-dashboard'}, 
@@ -317,7 +316,7 @@
             
             const content = document.createElement('div');
             if(state.viewMode==='dashboard') state.currentUser.role==='admin'?renderAdminDashboard(content):renderUserDashboard(content);
-            else if(state.viewMode==='booking') renderUserDashboard(content); // <-- Admin uses User Dashboard here
+            else if(state.viewMode==='booking') renderUserDashboard(content); 
             else if(state.viewMode==='history') renderHistoryView(content);
             else if(state.viewMode==='calendar') renderCalendar(content);
             else if(state.viewMode==='users') renderUserManagement(content);
@@ -433,7 +432,7 @@
                                                 <div class="text-xs text-gray-500 flex items-center gap-1 mt-1">
                                                     📅 ${dayjs(b.startDate).format('DD/MM/YY')} ${b.startTime} 
                                                     <span class="text-gray-300">|</span> 
-                                                    🚘 ${b.carId?.name||'-'} 
+                                                    🚘 ${b.carId?.name||'-'} ${b.carId?.plate ? `(${b.carId.plate})` : ''} 
                                                     <span class="text-gray-300">|</span> 
                                                     👨‍✈️ ${b.driverId?.name||'-'}
                                                 </div>
@@ -513,7 +512,7 @@
 
         function renderUserDashboard(c) {
             const today = new Date().toISOString().split('T')[0];
-            const myBookings = state.bookings.filter(b => b.userId === state.currentUser.username);
+            const myBookings = state.bookings.filter(b => b.userId === state.currentUser.username && b.status !== 'maintenance');
             c.innerHTML = `
             <div class="grid md:grid-cols-12 gap-8">
                 <!-- Left: Booking Form -->
@@ -598,7 +597,7 @@
                                                     <i data-lucide="arrow-right" class="w-3 h-3 text-gray-300"></i> 
                                                     <span class="font-medium text-gray-700">${dayjs(b.endDate).format('DD/MM')}</span> ${b.endTime}
                                                 </div>
-                                                ${b.carId ? `<div class="mt-3 inline-flex items-center gap-2 text-xs bg-gray-50 border px-3 py-1.5 rounded-lg text-gray-600"><i data-lucide="car" class="w-3 h-3"></i> ${b.carId.name} ${b.driverId ? `<span class="text-gray-300">|</span> <i data-lucide="user" class="w-3 h-3"></i> ${b.driverId.name}` : ''}</div>` : ''}
+                                                ${b.carId ? `<div class="mt-3 inline-flex items-center gap-2 text-xs bg-gray-50 border px-3 py-1.5 rounded-lg text-gray-600"><i data-lucide="car" class="w-3 h-3"></i> ${b.carId.name} ${b.carId.plate ? `(${b.carId.plate})` : ''} ${b.driverId ? `<span class="text-gray-300">|</span> <i data-lucide="user" class="w-3 h-3"></i> ${b.driverId.name}` : ''}</div>` : ''}
                                             </div>
                                             <div class="flex flex-col gap-2 items-end pt-1">
                                                 ${b.status==='approved' ? `<button onclick="startTrip('${b._id}')" class="bg-green-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow hover:bg-green-700 flex items-center gap-1 transition transform hover:scale-105">🚀 เริ่มงาน</button>` : ''}
@@ -617,11 +616,21 @@
 
         // --- HISTORY & CALENDAR VIEWS ---
         function renderHistoryView(c) {
-             const list = state.bookings.sort((a,b)=>new Date(b.startDate)-new Date(a.startDate));
+             const isMaintenance = state.historyFilter === 'maintenance';
+             const list = state.bookings
+                .filter(b => isMaintenance ? b.status === 'maintenance' : b.status !== 'maintenance')
+                .sort((a,b)=>new Date(b.startDate)-new Date(a.startDate));
+
             c.innerHTML = `
             <div class="bg-white p-6 rounded-2xl shadow-sm border">
                 <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-                    <h3 class="font-bold text-xl flex items-center gap-2 text-gray-800"><div class="bg-indigo-100 p-2 rounded-lg text-indigo-600"><i data-lucide="file-text"></i></div> ประวัติการใช้งาน & แก้ไข</h3>
+                    <h3 class="font-bold text-xl flex items-center gap-2 text-gray-800"><div class="bg-indigo-100 p-2 rounded-lg text-indigo-600"><i data-lucide="file-text"></i></div> ประวัติ & รายงาน</h3>
+                    
+                    <div class="flex gap-2 bg-gray-100 p-1 rounded-lg">
+                        <button onclick="state.historyFilter='trips';renderApp()" class="${!isMaintenance ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:bg-gray-200'} px-4 py-1.5 rounded-md text-xs font-bold transition">รายการเดินทาง</button>
+                        <button onclick="state.historyFilter='maintenance';renderApp()" class="${isMaintenance ? 'bg-orange-600 text-white shadow-sm' : 'text-gray-500 hover:bg-gray-200'} px-4 py-1.5 rounded-md text-xs font-bold transition">บันทึกซ่อมบำรุง</button>
+                    </div>
+
                     <button onclick="exportCSV()" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 shadow hover:bg-green-700 transition"><i data-lucide="download"></i> Export CSV</button>
                 </div>
                 <div class="overflow-x-auto rounded-xl border border-gray-200">
@@ -631,14 +640,15 @@
                                 <th class="p-4 border-b">วันที่ / เวลา</th>
                                 <th class="p-4 border-b">รายละเอียด</th>
                                 <th class="p-4 border-b">รถ / คนขับ</th>
-                                <th class="p-4 border-b text-right">เลขไมล์ (km)</th>
-                                <th class="p-4 border-b text-right">ค่าใช้จ่าย (บาท)</th>
+                                <th class="p-4 border-b text-right">${isMaintenance ? 'หมายเหตุ' : 'เลขไมล์ (km)'}</th>
+                                ${!isMaintenance ? '<th class="p-4 border-b text-right">ค่าใช้จ่าย (บาท)</th>' : ''}
                                 <th class="p-4 border-b text-center">สถานะ</th>
                                 <th class="p-4 border-b text-right">จัดการ</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-gray-100">
-                            ${list.map(b => {
+                            ${list.length === 0 ? `<tr><td colspan="7" class="p-8 text-center text-gray-400">ไม่มีข้อมูล</td></tr>` : 
+                            list.map(b => {
                                 const u = state.users.find(x=>x.username===b.userId)||{firstName:b.userId};
                                 const dist = (b.endOdometer && b.startOdometer) ? (b.endOdometer - b.startOdometer).toLocaleString() : '-';
                                 return `
@@ -648,23 +658,29 @@
                                         <div class="text-xs text-gray-500 font-mono mt-1">${b.startTime} - ${b.endTime}</div>
                                     </td>
                                     <td class="p-4 align-top">
-                                        <div class="font-medium text-gray-900 line-clamp-2" title="${b.remarks}">${b.remarks}</div>
+                                        <div class="font-medium text-gray-900 line-clamp-2" title="${b.remarks}">${b.remarks.replace('[ปิด]', '')}</div>
                                         <div class="text-xs text-gray-500 mt-1 flex items-center gap-1"><i data-lucide="user" class="w-3 h-3"></i> ${u.firstName}</div>
                                     </td>
                                     <td class="p-4 align-top">
-                                        <div class="text-xs font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded inline-block mb-1">🚘 ${b.carId?.name||'-'}</div>
+                                        <div class="text-xs font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded inline-block mb-1">🚘 ${b.carId?.name||'-'} ${b.carId?.plate ? `(${b.carId.plate})` : ''}</div>
                                         <div class="text-xs font-medium text-green-700 bg-green-50 px-2 py-0.5 rounded inline-block">👨‍✈️ ${b.driverId?.name||'-'}</div>
                                     </td>
                                     <td class="p-4 align-top text-right">
-                                        <div class="text-gray-900 font-mono text-xs">Start: <span class="font-bold">${b.startOdometer?.toLocaleString()||'-'}</span></div>
-                                        <div class="text-gray-900 font-mono text-xs">End: <span class="font-bold">${b.endOdometer?.toLocaleString()||'-'}</span></div>
-                                        ${dist!=='-'?`<div class="text-[10px] text-blue-600 font-bold mt-1 bg-blue-50 inline-block px-1 rounded">+${dist} km</div>`:''}
+                                        ${isMaintenance 
+                                            ? `<span class="text-gray-500 text-xs italic">${b.remarks}</span>`
+                                            : `
+                                                <div class="text-gray-900 font-mono text-xs">Start: <span class="font-bold">${b.startOdometer?.toLocaleString()||'-'}</span></div>
+                                                <div class="text-gray-900 font-mono text-xs">End: <span class="font-bold">${b.endOdometer?.toLocaleString()||'-'}</span></div>
+                                                ${dist!=='-'?`<div class="text-[10px] text-blue-600 font-bold mt-1 bg-blue-50 inline-block px-1 rounded">+${dist} km</div>`:''}
+                                            `
+                                        }
                                     </td>
+                                    ${!isMaintenance ? `
                                     <td class="p-4 align-top text-right text-xs">
                                         <div>⛽ ${b.fuelCost?.toLocaleString()||0}</div>
                                         <div>🛣️ ${b.tollCost?.toLocaleString()||0}</div>
                                         <div class="border-t mt-1 pt-1 font-bold text-gray-700">Total: ${((b.fuelCost||0)+(b.tollCost||0)).toLocaleString()}</div>
-                                    </td>
+                                    </td>` : ''}
                                     <td class="p-4 align-top text-center">
                                         <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase status-${b.status} text-white shadow-sm border border-white border-opacity-20">${b.status}</span>
                                     </td>
@@ -702,7 +718,7 @@
                             ${events.map(b => {
                                 let display = `${b.startTime} ${b.remarks}`;
                                 if(b.status === 'maintenance') {
-                                    const res = b.carId ? `🚘 ${b.carId.plate||b.carId.name}` : (b.driverId ? `👨‍✈️ ${b.driverId.name}` : '');
+                                    const res = b.carId ? `🚘 ${b.carId.name} (${b.carId.plate})` : (b.driverId ? `👨‍✈️ ${b.driverId.name}` : '');
                                     display = `${res} [ปิด] ${b.remarks.replace('[ปิด]', '')}`;
                                 }
                                 return `<div onclick="showBookingDetails('${b._id}')" class="event-pill status-${b.status} shadow-sm" title="${display}">${display}</div>`;
@@ -810,7 +826,7 @@
         async function handleResetPwd(e){ e.preventDefault(); await api.action('put',`users/${modalData.id}`,{password:new FormData(e.target).get('password')}); closeModal(); Swal.fire('Success'); }
         async function toggleUser(id, curr){ await api.action('put',`users/${id}`,{isActive:!curr}); api.fetchData(); }
         async function unlinkLine(id){ if((await Swal.fire({title:'Unlink?',showCancelButton:true})).isConfirmed){ await api.action('put',`users/${id}`,{resetLine:true}); api.fetchData(); } }
-        function openEditBookingModal(id){ const b=state.bookings.find(x=>x._id===id); modalData=b; document.getElementById('eb-car').innerHTML='<option value="">--</option>'+state.cars.map(c=>`<option value="${c._id}" ${b.carId?._id===c._id?'selected':''}>${c.name}</option>`).join(''); document.getElementById('eb-driver').innerHTML='<option value="">--</option>'+state.drivers.map(d=>`<option value="${d._id}" ${b.driverId?._id===d._id?'selected':''}>${d.name}</option>`).join(''); document.getElementById('eb-s-odo').value=b.startOdometer||0; document.getElementById('eb-e-odo').value=b.endOdometer||0; document.getElementById('eb-fuel').value=b.fuelCost||0; document.getElementById('eb-toll').value=b.tollCost||0; openModal('editBookingModal'); }
+        function openEditBookingModal(id){ const b=state.bookings.find(x=>x._id===id); modalData=b; document.getElementById('eb-car').innerHTML='<option value="">--</option>'+state.cars.map(c=>`<option value="${c._id}" ${b.carId?._id===c._id?'selected':''}>${c.name} (${c.plate})</option>`).join(''); document.getElementById('eb-driver').innerHTML='<option value="">--</option>'+state.drivers.map(d=>`<option value="${d._id}" ${b.driverId?._id===d._id?'selected':''}>${d.name}</option>`).join(''); document.getElementById('eb-s-odo').value=b.startOdometer||0; document.getElementById('eb-e-odo').value=b.endOdometer||0; document.getElementById('eb-fuel').value=b.fuelCost||0; document.getElementById('eb-toll').value=b.tollCost||0; openModal('editBookingModal'); }
         async function handleEditBookingSubmit(e){ e.preventDefault(); const d={carId:document.getElementById('eb-car').value||null, driverId:document.getElementById('eb-driver').value||null, startOdometer:document.getElementById('eb-s-odo').value, endOdometer:document.getElementById('eb-e-odo').value, fuelCost:document.getElementById('eb-fuel').value, tollCost:document.getElementById('eb-toll').value}; await api.action('put',`bookings/${modalData._id}`,d); closeModal(); Swal.fire('Updated'); api.fetchData(); }
 
         // Bulk & Utils
@@ -918,7 +934,7 @@
         function logout(){ localStorage.clear(); state.currentUser=null; renderApp(); }
         // 🔥 REMOVED: openLineQR function (as it's no longer used)
         
-        function exportCSV(){ const csv="\uFEFFDate,User,Car,Driver,Start,End,Fuel,Toll\n"+state.bookings.map(b=>`${b.startDate},"${b.userId}","${b.carId?.name||'-'}","${b.driverId?.name||'-'}",${b.startOdometer||0},${b.endOdometer||0},${b.fuelCost||0},${b.tollCost||0}`).join('\n'); const a=document.createElement('a'); a.href='data:text/csv;charset=utf-8,'+encodeURI(csv); a.download='report.csv'; a.click(); }
+        function exportCSV(){ const csv="\uFEFFDate,User,Car,Driver,Start,End,Fuel,Toll\n"+state.bookings.map(b=>`${b.startDate},"${b.userId}","${b.carId ? b.carId.name + ' (' + b.carId.plate + ')' : '-'}","${b.driverId?.name||'-'}",${b.startOdometer||0},${b.endOdometer||0},${b.fuelCost||0},${b.tollCost||0}`).join('\n'); const a=document.createElement('a'); a.href='data:text/csv;charset=utf-8,'+encodeURI(csv); a.download='report.csv'; a.click(); }
         function changeMonth(n){ state.currentDate=dayjs(state.currentDate).add(n,'month').toDate(); renderApp(); }
         function openModal(id){ document.getElementById(id).classList.add('show'); }
         function closeModal(){ document.querySelectorAll('.modal').forEach(e=>e.classList.remove('show')); }
