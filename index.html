@@ -42,6 +42,31 @@
         .event-pill { font-size: 11px; padding: 2px 6px; border-radius: 4px; margin-bottom: 2px; color: white; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; box-shadow: 0 1px 2px rgba(0,0,0,0.1); transition: transform 0.1s; }
         .event-pill:hover { transform: scale(1.02); filter: brightness(0.95); z-index: 10; position: relative; }
         
+        /* Maintenance Event Style - Distinct from trips */
+        .event-maintenance { 
+            font-size: 10px; 
+            padding: 2px 6px; 
+            border-radius: 4px; 
+            margin-bottom: 2px; 
+            cursor: pointer; 
+            white-space: nowrap; 
+            overflow: hidden; 
+            text-overflow: ellipsis; 
+            display: block; 
+            background-color: #f3f4f6; /* Gray background */
+            color: #6b7280; /* Gray text */
+            border: 1px dashed #d1d5db; /* Dashed border */
+            opacity: 0.9;
+            transition: all 0.1s;
+        }
+        .event-maintenance:hover {
+            background-color: #e5e7eb;
+            border-color: #9ca3af;
+            transform: scale(1.01);
+            z-index: 10;
+            position: relative;
+        }
+        
         /* Status Colors */
         .status-approved { background-color: #2563eb; } /* Blue */
         .status-active { background-color: #16a34a; }   /* Green */
@@ -439,6 +464,9 @@
                                     ${pending.map(b => {
                                         // 🚀 Calculate available resources for THIS booking
                                         const { cars: availCars, drivers: availDrivers } = getAvailableResourcesForBooking(b);
+
+                                        // 🔍 Find User Name to display instead of User ID
+                                        const user = state.users.find(u => u.username === b.userId) || { firstName: b.userId, lastName: '', department: '' };
                                         
                                         return `
                                         <div class="border border-gray-200 p-5 rounded-xl bg-white shadow-sm hover:shadow-md transition relative overflow-hidden group">
@@ -451,7 +479,7 @@
                                                         ${dayjs(b.startDate).format('DD/MM/YY')} ${b.startTime} - ${dayjs(b.endDate).format('DD/MM/YY')} ${b.endTime}
                                                     </div>
                                                     <div class="mt-2 inline-flex items-center gap-2 text-xs">
-                                                        <span class="bg-gray-100 px-2 py-1 rounded text-gray-600 font-medium flex items-center gap-1"><i data-lucide="user" class="w-3 h-3"></i> จองโดย: ${b.userId}</span>
+                                                        <span class="bg-gray-100 px-2 py-1 rounded text-gray-600 font-medium flex items-center gap-1"><i data-lucide="user" class="w-3 h-3"></i> จองโดย: ${user.firstName} ${user.lastName} (${user.department})</span>
                                                         ${b.useDriver 
                                                             ? '<span class="bg-green-100 text-green-700 px-2 py-1 rounded font-bold border border-green-200">ต้องการคนขับ</span>' 
                                                             : '<span class="bg-gray-100 text-gray-500 px-2 py-1 rounded font-medium border border-gray-200">ไม่ใช้คนขับ</span>'}
@@ -796,12 +824,23 @@
                         </div>
                         <div class="flex-1 overflow-hidden space-y-1 px-1">
                             ${events.map(b => {
-                                let display = `${b.startTime} ${b.remarks}`;
-                                if(b.status === 'maintenance') {
-                                    const res = b.carId ? `🚘 ${b.carId.name} (${b.carId.plate})` : (b.driverId ? `👨‍✈️ ${b.driverId.name}` : '');
-                                    display = `${res} [ปิด] ${b.remarks.replace('[ปิด]', '')}`;
+                                if (b.status === 'maintenance') {
+                                    // 🔧 Distinct View for Maintenance/Day Off
+                                    const isCar = !!b.carId;
+                                    // Handle populated object or ID string safely
+                                    const carName = (b.carId && typeof b.carId === 'object') ? b.carId.name : (state.cars.find(c=>c._id===b.carId)?.name || 'Unknown Car');
+                                    const driverName = (b.driverId && typeof b.driverId === 'object') ? b.driverId.name : (state.drivers.find(d=>d._id===b.driverId)?.name || 'Unknown Driver');
+                                    
+                                    const text = isCar ? `🔧 ${carName}` : `⛔ ${driverName}`;
+                                    const remark = b.remarks.replace('[ปิด]', '').trim();
+                                    const tooltip = `${isCar ? 'แจ้งซ่อม/หยุดรถ' : 'คนขับหยุดงาน'}: ${remark || '-'}`;
+                                    
+                                    return `<div onclick="showBookingDetails('${b._id}')" class="event-maintenance" title="${tooltip}">${text}</div>`;
+                                } else {
+                                    // 🚗 Standard Trip View
+                                    let display = `${b.startTime} ${b.remarks}`;
+                                    return `<div onclick="showBookingDetails('${b._id}')" class="event-pill status-${b.status} shadow-sm" title="${display}">${display}</div>`;
                                 }
-                                return `<div onclick="showBookingDetails('${b._id}')" class="event-pill status-${b.status} shadow-sm" title="${display}">${display}</div>`;
                             }).join('')}
                         </div>
                     </div>`);
@@ -826,7 +865,7 @@
                     <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full status-approved"></span> จองแล้ว</div>
                     <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full status-active"></span> กำลังใช้</div>
                     <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full status-completed"></span> จบงาน</div>
-                    <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full status-maintenance"></span> ซ่อม/หยุด</div>
+                    <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-gray-200 border border-gray-400"></span> ซ่อม/หยุด</div>
                 </div>
             </div>`;
         }
@@ -893,17 +932,26 @@
         async function approveBooking(id){ 
             const booking = state.bookings.find(x => x._id === id);
             const carId = document.getElementById(`c-${id}`).value;
-            const driverId = document.getElementById(`d-${id}`).value;
+            const rawDriverId = document.getElementById(`d-${id}`).value; // รับค่าดิบจาก Select Box
 
             if(!carId) return Swal.fire('Warning', 'กรุณาเลือกรถ', 'warning');
             
-            // ถ้า User ต้องการคนขับ Admin ต้องเลือกคนขับ
-            if (booking.useDriver && !driverId) {
+            // ถ้า User ต้องการคนขับ แต่ Admin ไม่เลือก -> แจ้งเตือน
+            if (booking.useDriver && !rawDriverId) {
                 return Swal.fire('Warning', 'งานนี้ผู้จองต้องการคนขับ กรุณาเลือกคนขับ', 'warning');
             }
 
-            await api.action('put', `bookings/${id}`, { status:'approved', carId, driverId }); 
-            api.fetchData(); 
+            // ถ้า User ไม่ต้องการคนขับ แล้ว Admin ไม่ได้เลือก (ค่าว่าง) -> แปลงเป็น null ส่งไปหลังบ้าน
+            const driverId = rawDriverId === "" ? null : rawDriverId;
+
+            const res = await api.action('put', `bookings/${id}`, { status:'approved', carId, driverId }); 
+            
+            if(res.success) {
+                Swal.fire('Success', 'อนุมัติเรียบร้อย', 'success');
+                api.fetchData(); 
+            } else {
+                Swal.fire('Error', res.message, 'error');
+            }
         }
 
         async function rejectBooking(id) { const { value: reason } = await Swal.fire({ title: 'ระบุเหตุผล', input: 'text', showCancelButton: true }); if (reason) { await api.action('put', `bookings/${id}`, { status: 'rejected', rejectionReason: reason }); api.fetchData(); } }
@@ -1048,7 +1096,45 @@
         function changeMonth(n){ state.currentDate=dayjs(state.currentDate).add(n,'month').toDate(); renderApp(); }
         function openModal(id){ document.getElementById(id).classList.add('show'); }
         function closeModal(){ document.querySelectorAll('.modal').forEach(e=>e.classList.remove('show')); }
-        function renderCharts() { if(!state.stats)return; const ctx1=document.getElementById('carChart'), ctx2=document.getElementById('driverChart'), ctx3=document.getElementById('deptChart'); if(ctx1){Chart.getChart(ctx1)?.destroy();new Chart(ctx1,{type:'bar',data:{labels:state.stats.carStats.map(x=>x.name),datasets:[{label:'Trip',data:state.stats.carStats.map(x=>x.count),backgroundColor:'#3b82f6'}]}});} if(ctx2){Chart.getChart(ctx2)?.destroy();new Chart(ctx2,{type:'bar',data:{labels:state.stats.driverStats.map(x=>x.name),datasets:[{label:'Trip',data:state.stats.driverStats.map(x=>x.count),backgroundColor:'#10b981'}]},options:{indexAxis:'y'}});} if(ctx3){Chart.getChart(ctx3)?.destroy();new Chart(ctx3,{type:'doughnut',data:{labels:state.stats.deptStats.map(x=>x.name),datasets:[{data:state.stats.deptStats.map(x=>x.count),backgroundColor:['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6']}]}});} }
+        function renderCharts() { 
+            if(!state.stats)return; 
+            const ctx1=document.getElementById('carChart'), ctx2=document.getElementById('driverChart'), ctx3=document.getElementById('deptChart'); 
+            if(ctx1){
+                Chart.getChart(ctx1)?.destroy();
+                new Chart(ctx1,{type:'bar',data:{labels:state.stats.carStats.map(x=>x.name),datasets:[{label:'Trip',data:state.stats.carStats.map(x=>x.count),backgroundColor:'#3b82f6'}]}});
+            } 
+            if(ctx2){
+                Chart.getChart(ctx2)?.destroy();
+                new Chart(ctx2,{type:'bar',data:{labels:state.stats.driverStats.map(x=>x.name),datasets:[{label:'Trip',data:state.stats.driverStats.map(x=>x.count),backgroundColor:'#10b981'}]},options:{indexAxis:'y'}});
+            } 
+            if(ctx3){
+                Chart.getChart(ctx3)?.destroy();
+                // 🚀 MODIFIED: Added options to prevent chart from growing too large
+                new Chart(ctx3,{
+                    type:'doughnut',
+                    data:{
+                        labels:state.stats.deptStats.map(x=>x.name),
+                        datasets:[{
+                            data:state.stats.deptStats.map(x=>x.count),
+                            backgroundColor:['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6']
+                        }]
+                    },
+                    options: {
+                        maintainAspectRatio: false, // Fix: Allow chart to resize based on container height
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                position: 'right', // Fix: Move legend to right to save vertical space
+                                labels: {
+                                    boxWidth: 10,
+                                    font: { size: 10 }
+                                }
+                            }
+                        }
+                    }
+                });
+            } 
+        }
         async function handleChangePwdSubmit(e){ e.preventDefault(); await api.action('post','change-password',{userId:state.currentUser._id,...Object.fromEntries(new FormData(e.target))}); closeModal(); Swal.fire('Success'); }
 
         function renderModals() {
