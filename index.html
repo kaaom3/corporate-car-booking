@@ -73,8 +73,8 @@
         dayjs.locale('th');
 
         // 🔥 CONFIGURATION
-        const API_URL = 'https://obtrusive-interlinearly-everette.ngrok-free.dev/api'; 
-        const LINE_BOT_ID = '@342rmqlv'; 
+        // ปรับ URL ให้ตรงกับ Server (localhost:5000)
+        const API_URL = 'http://localhost:5000/api'; 
         const DEPARTMENTS = ["Admissions", "Executive Office", "Engineer", "Food & Beverage", "Finance", "Housekeeping", "HR & TQM", "Information & Technology", "Operations", "Retails", "Sales"];
 
         // Axios Configuration
@@ -129,6 +129,7 @@
                     state.drivers = d.data || []; 
                     state.bookings = b.data || [];
                     
+                    // Admin fetches extra data
                     if (state.currentUser?.role === 'admin') {
                         const [u, s] = await Promise.all([
                             axios.get(`${API_URL}/users`).catch(()=>({data:[]})), 
@@ -136,6 +137,10 @@
                         ]);
                         state.users = u.data || []; 
                         state.stats = s.data || {};
+                    } else {
+                        // User fetches colleagues for reference if needed (optional)
+                         const u = await axios.get(`${API_URL}/colleagues`).catch(()=>({data:[]}));
+                         state.users = u.data || []; // Store strictly limited user list
                     }
                     renderApp(); 
                 } catch (e) { console.error("Fetch Error:", e); }
@@ -171,7 +176,7 @@
             <div class="min-h-screen w-full flex items-center justify-center bg-blue-900 relative overflow-hidden fade-in">
                 <!-- Background with Blur Overlay -->
                 <div class="absolute inset-0 z-0">
-                     <img src="./11-12-2025 17-28-23.png" onerror="this.src='https://images.unsplash.com/photo-1575429198097-0414ec08e8cd?q=80&w=2940&auto=format&fit=crop'" 
+                     <img src="https://images.unsplash.com/photo-1575429198097-0414ec08e8cd?q=80&w=2940&auto=format&fit=crop" 
                          class="w-full h-full object-cover opacity-60 blur-sm scale-105" alt="Background">
                     <div class="absolute inset-0 bg-gradient-to-t from-blue-900/90 to-cyan-800/40"></div>
                 </div>
@@ -213,10 +218,6 @@
                                     <i data-lucide="lock" class="text-gray-400 w-5 h-5 group-focus-within:text-blue-500 transition-colors"></i>
                                 </div>
                                 <input type="password" name="password" class="w-full border border-gray-300 p-3 pl-11 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-gray-50 focus:bg-white placeholder-gray-400" placeholder="ระบุรหัสผ่าน" required>
-                            </div>
-                            <!-- Forgot Password -->
-                            <div class="text-right mt-2">
-                                <a href="#" onclick="Swal.fire({icon:'info', title:'ลืมรหัสผ่าน?', text:'กรุณาติดต่อแผนก IT หรือผู้ดูแลระบบเพื่อรีเซ็ตรหัสผ่าน'})" class="text-xs text-blue-600 hover:text-blue-800 font-medium hover:underline transition">ลืมรหัสผ่าน?</a>
                             </div>
                         </div>
 
@@ -280,6 +281,12 @@
                             <div class="text-[10px] text-gray-500 uppercase tracking-wider">${state.currentUser.department}</div>
                         </div>
                         <div class="h-6 w-px bg-gray-200 mx-2 hidden md:block"></div>
+                        
+                        <!-- 🔥 Added: Link LINE Button -->
+                        <button onclick="generateLineToken()" class="p-2 hover:bg-green-50 text-green-600 rounded-full transition" title="เชื่อมต่อ LINE">
+                            <i data-lucide="message-circle" class="w-5 h-5"></i>
+                        </button>
+                        
                         <button onclick="openModal('changePwdModal')" class="p-2 hover:bg-gray-100 rounded-full text-gray-500 transition" title="เปลี่ยนรหัสผ่าน"><i data-lucide="key" class="w-5 h-5"></i></button>
                         <button onclick="logout()" class="p-2 hover:bg-red-50 text-red-500 rounded-full transition" title="ออกจากระบบ"><i data-lucide="log-out" class="w-5 h-5"></i></button>
                     </div>
@@ -294,7 +301,7 @@
             const tabs = state.currentUser.role === 'admin' 
                 ? [
                     {id:'dashboard', l:'ภาพรวม & จัดการ', i:'layout-dashboard'}, 
-                    {id:'booking', l:'จองรถ (ใช้เอง)', i:'plus-circle'}, 
+                    {id:'booking', l:'จองรถ (ใช้เอง/แทน)', i:'plus-circle'}, 
                     {id:'history', l:'ประวัติ & รายงาน', i:'file-text'}, 
                     {id:'calendar', l:'ปฏิทินงาน', i:'calendar'}, 
                     {id:'users', l:'ผู้ใช้งาน', i:'users'}
@@ -523,6 +530,18 @@
                     </div>
                     
                     <form onsubmit="submitBooking(event)" class="space-y-5">
+                        
+                        <!-- 🔥 Added: Admin Book on Behalf -->
+                        ${state.currentUser.role === 'admin' ? `
+                            <div>
+                                <label class="text-xs font-bold text-purple-600 block mb-1">👑 จองในนาม (Admin Only)</label>
+                                <select name="userId" class="w-full border p-2.5 rounded-lg text-sm bg-purple-50 focus:bg-white focus:ring-2 focus:ring-purple-500 outline-none transition cursor-pointer">
+                                    <option value="${state.currentUser.username}">จองเอง (Me)</option>
+                                    ${state.users.filter(u => u.username !== state.currentUser.username).map(u => `<option value="${u.username}">${u.firstName} ${u.lastName} (${u.department})</option>`).join('')}
+                                </select>
+                            </div>
+                        ` : `<input type="hidden" name="userId" value="${state.currentUser.username}">`}
+
                         <div class="space-y-3">
                             <div class="grid grid-cols-2 gap-3">
                                 <div><label class="text-xs font-bold text-gray-500 block mb-1">วันที่เริ่ม</label><input type="date" name="startDate" id="sd" min="${today}" class="w-full border p-2.5 rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition" required onchange="checkAvail()"></div>
@@ -601,7 +620,11 @@
                                             </div>
                                             <div class="flex flex-col gap-2 items-end pt-1">
                                                 ${b.status==='approved' ? `<button onclick="startTrip('${b._id}')" class="bg-green-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow hover:bg-green-700 flex items-center gap-1 transition transform hover:scale-105">🚀 เริ่มงาน</button>` : ''}
-                                                ${b.status==='active' ? `<button onclick="endTrip('${b._id}', ${b.startOdometer})" class="bg-gray-800 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow hover:bg-black flex items-center gap-1 transition transform hover:scale-105">🏁 คืนรถ</button>` : ''}
+                                                ${b.status==='active' ? `
+                                                    <div class="flex flex-col gap-1 w-full items-end">
+                                                        <button onclick="openExtendModal('${b._id}')" class="bg-yellow-500 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow hover:bg-yellow-600 flex items-center gap-1 transition transform hover:scale-105 w-fit">⏳ ขยายเวลา</button>
+                                                        <button onclick="endTrip('${b._id}', ${b.startOdometer})" class="bg-gray-800 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow hover:bg-black flex items-center gap-1 transition transform hover:scale-105 w-fit">🏁 คืนรถ</button>
+                                                    </div>` : ''}
                                                 ${['pending','approved'].includes(b.status) ? `<button onclick="cancelBooking('${b._id}')" class="text-red-500 text-xs font-medium hover:text-red-700 hover:underline px-2 py-1">ยกเลิก</button>` : ''}
                                             </div>
                                         </div>
@@ -775,7 +798,6 @@
                                 <td class="p-4"><span class="px-2 py-1 rounded-md text-xs font-bold border ${u.role==='admin'?'bg-purple-100 text-purple-700 border-purple-200':'bg-gray-100 text-gray-600 border-gray-200'}">${u.role.toUpperCase()}</span></td>
                                 <td class="p-4">${u.lineUserId ? '<span class="text-green-600 flex gap-1 items-center font-bold text-xs"><i data-lucide="check-circle" class="w-3 h-3"></i> Linked</span>' : '<span class="text-gray-400 text-xs flex gap-1 items-center"><i data-lucide="circle" class="w-3 h-3"></i> Unlinked</span>'}</td>
                                 <td class="p-4 text-right flex justify-end gap-1">
-                                    <!-- 🔥 Toggle Role Button -->
                                     <button onclick="toggleUserRole('${u._id}', '${u.role}')" class="bg-white border border-gray-200 text-purple-500 p-2 rounded-lg hover:bg-purple-50 hover:border-purple-300 transition" title="เปลี่ยน Role">
                                         <i data-lucide="${u.role==='admin'?'shield-off':'shield'}" class="w-4 h-4"></i>
                                     </button>
@@ -814,6 +836,22 @@
         async function startTrip(id){ const b=state.bookings.find(x=>x._id===id); let co=0; if(b.carId){const r=await axios.get(`${API_URL}/cars`);const c=r.data.find(x=>x._id===(b.carId._id||b.carId));if(c)co=c.currentOdometer||0;} const {value:v}=await Swal.fire({title:'เริ่มเดินทาง',html:`<div class="mb-2">ไมล์ปัจจุบัน: <b>${co}</b></div><input id="sw1" type="number" class="swal2-input" value="${co}">`,preConfirm:()=>{const v=document.getElementById('sw1').value;if(v<co)Swal.showValidationMessage('ห้ามต่ำกว่าเดิม');return v;}}); if(v){await api.action('put',`bookings/${id}`,{status:'active',startOdometer:v});api.fetchData();} }
         async function endTrip(id,so){ const {value:f}=await Swal.fire({title:'คืนรถ',html:`<input id="eo" placeholder="ไมล์จบ > ${so}" class="swal2-input"><input id="ef" placeholder="น้ำมัน" class="swal2-input"><input id="et" placeholder="ทางด่วน" class="swal2-input">`,preConfirm:()=>{return {endOdometer:document.getElementById('eo').value, fuelCost:document.getElementById('ef').value, tollCost:document.getElementById('et').value}}}); if(f){if(Number(f.endOdometer)<=Number(so))return Swal.fire('Error','ไมล์จบต้องมากกว่า','error'); await api.action('put',`bookings/${id}`,{status:'completed',...f});api.fetchData();} }
 
+        // 🔥 Added: Generate LINE Token Logic
+        async function generateLineToken() {
+            const r = await api.action('post', 'generate-link-token', { userId: state.currentUser._id });
+            if (r.success) {
+                Swal.fire({
+                    title: '🔑 รหัสเชื่อมต่อ LINE',
+                    html: `<div class="text-3xl font-mono font-bold text-blue-600 my-4 tracking-widest">${r.data.token}</div>
+                           <p class="text-sm text-gray-600">พิมพ์คำสั่งนี้ใน LINE Bot:</p>
+                           <code class="block bg-gray-100 p-2 rounded mt-2 text-sm text-gray-800">!link ${r.data.token}</code>`,
+                    icon: 'info'
+                });
+            } else {
+                Swal.fire('Error', r.message, 'error');
+            }
+        }
+
         // Resource Mgmt Wrappers
         async function addResource(e,t){ e.preventDefault(); await api.action('post',t,Object.fromEntries(new FormData(e.target))); api.fetchData(); e.target.reset(); }
         async function deleteResource(t,id){ if((await Swal.fire({title:'ยืนยันลบ?',showCancelButton:true})).isConfirmed){ await api.action('delete',`${t}/${id}`); api.fetchData(); } }
@@ -828,6 +866,22 @@
         async function unlinkLine(id){ if((await Swal.fire({title:'Unlink?',showCancelButton:true})).isConfirmed){ await api.action('put',`users/${id}`,{resetLine:true}); api.fetchData(); } }
         function openEditBookingModal(id){ const b=state.bookings.find(x=>x._id===id); modalData=b; document.getElementById('eb-car').innerHTML='<option value="">--</option>'+state.cars.map(c=>`<option value="${c._id}" ${b.carId?._id===c._id?'selected':''}>${c.name} (${c.plate})</option>`).join(''); document.getElementById('eb-driver').innerHTML='<option value="">--</option>'+state.drivers.map(d=>`<option value="${d._id}" ${b.driverId?._id===d._id?'selected':''}>${d.name}</option>`).join(''); document.getElementById('eb-s-odo').value=b.startOdometer||0; document.getElementById('eb-e-odo').value=b.endOdometer||0; document.getElementById('eb-fuel').value=b.fuelCost||0; document.getElementById('eb-toll').value=b.tollCost||0; openModal('editBookingModal'); }
         async function handleEditBookingSubmit(e){ e.preventDefault(); const d={carId:document.getElementById('eb-car').value||null, driverId:document.getElementById('eb-driver').value||null, startOdometer:document.getElementById('eb-s-odo').value, endOdometer:document.getElementById('eb-e-odo').value, fuelCost:document.getElementById('eb-fuel').value, tollCost:document.getElementById('eb-toll').value}; await api.action('put',`bookings/${modalData._id}`,d); closeModal(); Swal.fire('Updated'); api.fetchData(); }
+
+        // 🔥 Added: Extend Time Modal Logic
+        function openExtendModal(id) {
+            const b = state.bookings.find(x => x._id === id);
+            modalData = b;
+            document.getElementById('ext-date').value = b.endDate;
+            document.getElementById('ext-time').value = b.endTime;
+            openModal('extendModal');
+        }
+        async function handleExtendSubmit(e) {
+            e.preventDefault();
+            const d = { newEndDate: document.getElementById('ext-date').value, newEndTime: document.getElementById('ext-time').value };
+            const r = await api.action('post', `bookings/${modalData._id}/extend`, d);
+            if (r.success) { closeModal(); Swal.fire('Success', 'ต่อเวลาเรียบร้อย', 'success'); api.fetchData(); } 
+            else { Swal.fire('Error', r.message, 'error'); }
+        }
 
         // Bulk & Utils
         function openBulkMaintenanceModal(type, id, name) { bulkState={...bulkState, resourceType:type, resourceId:id, resourceName:name, selectedDates:new Set()}; state.bookings.forEach(b=>{if(b.status==='maintenance' && ((type==='car' && b.carId?._id===id) || (type==='driver' && b.driverId?._id===id))) bulkState.selectedDates.add(b.startDate)}); document.getElementById('bulk-remark').value=''; renderBulkCalendar(); openModal('bulkMaintenanceModal'); }
@@ -932,7 +986,6 @@
         }
 
         function logout(){ localStorage.clear(); state.currentUser=null; renderApp(); }
-        // 🔥 REMOVED: openLineQR function (as it's no longer used)
         
         function exportCSV(){ const csv="\uFEFFDate,User,Car,Driver,Start,End,Fuel,Toll\n"+state.bookings.map(b=>`${b.startDate},"${b.userId}","${b.carId ? b.carId.name + ' (' + b.carId.plate + ')' : '-'}","${b.driverId?.name||'-'}",${b.startOdometer||0},${b.endOdometer||0},${b.fuelCost||0},${b.tollCost||0}`).join('\n'); const a=document.createElement('a'); a.href='data:text/csv;charset=utf-8,'+encodeURI(csv); a.download='report.csv'; a.click(); }
         function changeMonth(n){ state.currentDate=dayjs(state.currentDate).add(n,'month').toDate(); renderApp(); }
@@ -948,6 +1001,22 @@
             <div id="resetPwdModal" class="modal fixed inset-0 bg-black/70 flex items-center justify-center p-4"><div class="bg-white p-6 rounded-2xl w-full max-w-sm modal-content shadow-2xl"><h3 class="font-bold mb-4 text-lg text-yellow-600">รีเซ็ตรหัสผ่าน User</h3><form onsubmit="handleResetPwd(event)" class="space-y-4"><input type="password" name="password" placeholder="ตั้งรหัสผ่านใหม่" class="w-full border p-3 rounded-lg bg-yellow-50" required><div class="flex justify-end gap-3 mt-6"><button type="button" onclick="closeModal()" class="text-gray-500">ยกเลิก</button><button class="bg-yellow-500 text-white px-6 py-2 rounded-lg font-bold">รีเซ็ต</button></div></form></div></div>
             <div id="editUserModal" class="modal fixed inset-0 bg-black/70 flex items-center justify-center p-4"><div class="bg-white p-6 rounded-2xl w-full max-w-md modal-content shadow-2xl"><h3 class="font-bold mb-6 text-lg">แก้ไขข้อมูลผู้ใช้</h3><form onsubmit="handleEditUserSubmit(event)" class="space-y-4"><div class="grid grid-cols-2 gap-4"><input id="eu-fn" name="firstName" placeholder="ชื่อ" class="w-full border p-3 rounded-lg" required><input id="eu-ln" name="lastName" placeholder="สกุล" class="w-full border p-3 rounded-lg" required></div><select id="eu-dept" name="department" class="w-full border p-3 rounded-lg bg-white" required>${DEPARTMENTS.map(d=>`<option value="${d}">${d}</option>`).join('')}</select><input id="eu-email" name="email" placeholder="Email" class="w-full border p-3 rounded-lg"><div class="flex justify-end gap-3 mt-6"><button type="button" onclick="closeModal()" class="text-gray-500">ยกเลิก</button><button class="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold">บันทึก</button></div></form></div></div>
             <div id="editBookingModal" class="modal fixed inset-0 bg-black/70 flex items-center justify-center p-4"><div class="bg-white p-6 rounded-2xl w-full max-w-md modal-content shadow-2xl"><h3 class="font-bold mb-6 text-blue-600 text-lg">แก้ไขข้อมูลงานจอง</h3><form onsubmit="handleEditBookingSubmit(event)" class="space-y-4"><div><label class="text-xs font-bold text-gray-500">เปลี่ยนรถ</label><select id="eb-car" class="w-full border p-2.5 rounded-lg text-sm"></select></div><div><label class="text-xs font-bold text-gray-500">เปลี่ยนคนขับ</label><select id="eb-driver" class="w-full border p-2.5 rounded-lg text-sm"></select></div><div class="grid grid-cols-2 gap-4"><div><label class="text-xs font-bold text-gray-500">ไมล์เริ่ม</label><input type="number" id="eb-s-odo" class="w-full border p-2 rounded-lg text-sm"></div><div><label class="text-xs font-bold text-gray-500">ไมล์จบ</label><input type="number" id="eb-e-odo" class="w-full border p-2 rounded-lg text-sm"></div></div><div class="grid grid-cols-2 gap-4"><div><label class="text-xs font-bold text-gray-500">น้ำมัน</label><input type="number" id="eb-fuel" class="w-full border p-2 rounded-lg text-sm"></div><div><label class="text-xs font-bold text-gray-500">ทางด่วน</label><input type="number" id="eb-toll" class="w-full border p-2 rounded-lg text-sm"></div></div><div class="flex justify-end gap-3 mt-6"><button type="button" onclick="closeModal()" class="text-gray-500">ยกเลิก</button><button class="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold">บันทึก</button></div></form></div></div>
+            
+            <!-- 🔥 Added: Extend Time Modal -->
+            <div id="extendModal" class="modal fixed inset-0 bg-black/70 flex items-center justify-center p-4">
+                <div class="bg-white p-6 rounded-2xl w-full max-w-sm modal-content shadow-2xl">
+                    <h3 class="font-bold mb-4 text-lg text-yellow-600">⏳ ขยายเวลาการจอง</h3>
+                    <form onsubmit="handleExtendSubmit(event)" class="space-y-4">
+                        <div><label class="text-xs text-gray-500 font-bold">วันที่คืนใหม่</label><input type="date" id="ext-date" class="w-full border p-3 rounded-lg bg-yellow-50" required></div>
+                        <div><label class="text-xs text-gray-500 font-bold">เวลาคืนใหม่</label><input type="time" id="ext-time" class="w-full border p-3 rounded-lg bg-yellow-50" required></div>
+                        <div class="flex justify-end gap-3 mt-6">
+                            <button type="button" onclick="closeModal()" class="text-gray-500">ยกเลิก</button>
+                            <button class="bg-yellow-500 text-white px-6 py-2 rounded-lg font-bold">ยืนยัน</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
             <div id="bulkMaintenanceModal" class="modal fixed inset-0 bg-black/80 flex items-center justify-center p-4"><div class="bg-white p-6 rounded-2xl w-full max-w-2xl modal-content flex flex-col h-[90vh]"><div class="flex justify-between items-center mb-4"><h3 class="font-bold text-xl text-orange-600">จัดการวันหยุด/ซ่อม</h3><button onclick="closeModal()" class="text-gray-400 hover:text-gray-600"><i data-lucide="x"></i></button></div><div class="flex items-center justify-between mb-4 bg-gray-50 p-2 rounded-lg"><button onclick="bulkState.currentMonth=bulkState.currentMonth.subtract(1,'month');renderBulkCalendar()" class="p-2 hover:bg-white rounded"><i data-lucide="chevron-left"></i></button><span id="bulk-month-label" class="font-bold text-lg"></span><button onclick="bulkState.currentMonth=bulkState.currentMonth.add(1,'month');renderBulkCalendar()" class="p-2 hover:bg-white rounded"><i data-lucide="chevron-right"></i></button></div><div class="grid grid-cols-7 gap-2 mb-2 text-center text-xs font-bold text-gray-500 uppercase"><div onclick="toggleBulkDayColumn(0)" class="bulk-header">อา</div><div onclick="toggleBulkDayColumn(1)" class="bulk-header">จ</div><div onclick="toggleBulkDayColumn(2)" class="bulk-header">อ</div><div onclick="toggleBulkDayColumn(3)" class="bulk-header">พ</div><div onclick="toggleBulkDayColumn(4)" class="bulk-header">พฤ</div><div onclick="toggleBulkDayColumn(5)" class="bulk-header">ศ</div><div onclick="toggleBulkDayColumn(6)" class="bulk-header">ส</div></div><div id="bulk-calendar-grid" class="grid grid-cols-7 gap-2 flex-1 overflow-y-auto p-1"></div><div class="mt-4 pt-4 border-t space-y-3"><input id="bulk-remark" class="w-full border p-3 rounded-lg text-sm" placeholder="สาเหตุ"><div class="flex justify-end gap-3"><button onclick="closeModal()" class="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">ยกเลิก</button><button onclick="submitBulkMaintenance()" class="px-6 py-2 bg-orange-600 text-white rounded-lg font-bold">บันทึก</button></div></div></div></div>`;
         }
         
