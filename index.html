@@ -1048,7 +1048,7 @@
                 </form>
                 <div class="overflow-x-auto rounded-xl border border-gray-200">
                     <table class="w-full text-sm text-left">
-                        <thead class="bg-gray-50 text-gray-500 font-bold text-xs uppercase"><tr><th class="p-4">User</th><th class="p-4">Name</th><th class="p-4">Role</th><th class="p-4 text-right">Actions</th></tr></thead>
+                        <thead class="bg-gray-50 text-gray-500 font-bold text-xs uppercase"><tr><th class="p-4">User</th><th class="p-4">Name</th><th class="p-4">Role</th><th class="p-4">Status</th><th class="p-4 text-right">Actions</th></tr></thead>
                         <tbody>
                             ${state.users.map(u => {
                                 // SAFE GUARD: Handle potentially missing fields to prevent crash
@@ -1061,6 +1061,7 @@
                                     <td class="p-4 font-bold text-gray-700">${u.username || '-'}</td>
                                     <td class="p-4 text-gray-600">${u.firstName || ''} ${u.lastName || ''} <br><span class="text-[10px] text-gray-400">${u.department || '-'}</span></td>
                                     <td class="p-4"><span class="px-2 py-1 rounded-md text-xs font-bold border ${role==='admin'?'bg-purple-100 text-purple-700 border-purple-200':'bg-gray-100 text-gray-600 border-gray-200'}">${roleDisplay}</span></td>
+                                    <td class="p-4">${u.lineUserId ? '<span class="text-green-600 flex gap-1 items-center font-bold text-xs"><i data-lucide="check-circle" class="w-3 h-3"></i> Linked</span>' : '<span class="text-gray-400 text-xs flex gap-1 items-center"><i data-lucide="circle" class="w-3 h-3"></i> Unlinked</span>'}</td>
                                     <td class="p-4 text-right flex justify-end gap-1">
                                         <button onclick="toggleUserRole('${u._id}', '${role}')" class="bg-white border border-gray-200 text-purple-500 p-2 rounded-lg hover:bg-purple-50 hover:border-purple-300 transition" title="เปลี่ยน Role">
                                             <i data-lucide="${role==='admin'?'shield-off':'shield'}" class="w-4 h-4"></i>
@@ -1163,7 +1164,44 @@
             } 
         }
 
-        async function endTrip(id,so){ const {value:f}=await Swal.fire({title:'คืนรถ',html:`<input id="eo" placeholder="ไมล์จบ > ${so}" class="swal2-input"><input id="ef" placeholder="น้ำมัน" class="swal2-input"><input id="et" placeholder="ทางด่วน" class="swal2-input">`,preConfirm:()=>{return {endOdometer:document.getElementById('eo').value, fuelCost:document.getElementById('ef').value, tollCost:document.getElementById('et').value}}}); if(f){if(Number(f.endOdometer)<=Number(so))return Swal.fire('Error','ไมล์จบต้องมากกว่า','error'); await api.action('put',`bookings/${id}`,{status:'completed',...f});api.fetchData();} }
+        async function endTrip(id,so){ 
+            // Safe Parsing
+            const startOdo = Number(so) || 0;
+
+            const {value:f}=await Swal.fire({
+                title:'คืนรถ',
+                html:`
+                    <div class="text-left mb-2 text-sm text-gray-600">ไมล์เริ่มต้น: <b>${startOdo}</b></div>
+                    <input id="eo" type="number" placeholder="เลขไมล์จบ (ต้องมากกว่า ${startOdo})" class="swal2-input">
+                    <input id="ef" type="number" placeholder="ค่าน้ำมัน (ถ้ามี)" class="swal2-input">
+                    <input id="et" type="number" placeholder="ค่าทางด่วน (ถ้ามี)" class="swal2-input">
+                `,
+                preConfirm:()=>{
+                    const eo = document.getElementById('eo').value;
+                    const ef = document.getElementById('ef').value;
+                    const et = document.getElementById('et').value;
+                    
+                    if (!eo) return Swal.showValidationMessage('กรุณาระบุเลขไมล์จบ');
+                    if (Number(eo) <= startOdo) return Swal.showValidationMessage('เลขไมล์จบต้องมากกว่าเลขไมล์เริ่มต้น');
+                    
+                    return {
+                        endOdometer: Number(eo), 
+                        fuelCost: Number(ef) || 0, 
+                        tollCost: Number(et) || 0
+                    };
+                }
+            }); 
+            
+            if(f){
+                try {
+                    await api.action('put',`bookings/${id}`,{status:'completed',...f});
+                    Swal.fire('Success', 'บันทึกการคืนรถเรียบร้อย', 'success');
+                    api.fetchData();
+                } catch(e) {
+                    Swal.fire('Error', e.message || 'เกิดข้อผิดพลาด', 'error');
+                }
+            } 
+        }
 
         // Resource Mgmt Wrappers & Modals... (Same as original)
         async function addResource(e,t){ e.preventDefault(); await api.action('post',t,Object.fromEntries(new FormData(e.target))); api.fetchData(); e.target.reset(); }
