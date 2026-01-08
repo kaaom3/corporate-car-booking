@@ -359,9 +359,6 @@
                             <div class="text-[10px] text-gray-500 uppercase tracking-wider">${state.currentUser.department}</div>
                         </div>
                         <div class="h-6 w-px bg-gray-200 mx-2 hidden md:block"></div>
-                        <button onclick="generateLineToken()" class="p-2 hover:bg-green-50 text-green-600 rounded-full transition" title="เชื่อมต่อ LINE">
-                            <i data-lucide="message-circle" class="w-5 h-5"></i>
-                        </button>
                         <button onclick="openModal('changePwdModal')" class="p-2 hover:bg-gray-100 rounded-full text-gray-500 transition" title="เปลี่ยนรหัสผ่าน"><i data-lucide="key" class="w-5 h-5"></i></button>
                         <button onclick="logout()" class="p-2 hover:bg-red-50 text-red-500 rounded-full transition" title="ออกจากระบบ"><i data-lucide="log-out" class="w-5 h-5"></i></button>
                     </div>
@@ -1051,7 +1048,7 @@
                 </form>
                 <div class="overflow-x-auto rounded-xl border border-gray-200">
                     <table class="w-full text-sm text-left">
-                        <thead class="bg-gray-50 text-gray-500 font-bold text-xs uppercase"><tr><th class="p-4">User</th><th class="p-4">Name</th><th class="p-4">Role</th><th class="p-4">Status</th><th class="p-4 text-right">Actions</th></tr></thead>
+                        <thead class="bg-gray-50 text-gray-500 font-bold text-xs uppercase"><tr><th class="p-4">User</th><th class="p-4">Name</th><th class="p-4">Role</th><th class="p-4 text-right">Actions</th></tr></thead>
                         <tbody>
                             ${state.users.map(u => {
                                 // SAFE GUARD: Handle potentially missing fields to prevent crash
@@ -1064,7 +1061,6 @@
                                     <td class="p-4 font-bold text-gray-700">${u.username || '-'}</td>
                                     <td class="p-4 text-gray-600">${u.firstName || ''} ${u.lastName || ''} <br><span class="text-[10px] text-gray-400">${u.department || '-'}</span></td>
                                     <td class="p-4"><span class="px-2 py-1 rounded-md text-xs font-bold border ${role==='admin'?'bg-purple-100 text-purple-700 border-purple-200':'bg-gray-100 text-gray-600 border-gray-200'}">${roleDisplay}</span></td>
-                                    <td class="p-4">${u.lineUserId ? '<span class="text-green-600 flex gap-1 items-center font-bold text-xs"><i data-lucide="check-circle" class="w-3 h-3"></i> Linked</span>' : '<span class="text-gray-400 text-xs flex gap-1 items-center"><i data-lucide="circle" class="w-3 h-3"></i> Unlinked</span>'}</td>
                                     <td class="p-4 text-right flex justify-end gap-1">
                                         <button onclick="toggleUserRole('${u._id}', '${role}')" class="bg-white border border-gray-200 text-purple-500 p-2 rounded-lg hover:bg-purple-50 hover:border-purple-300 transition" title="เปลี่ยน Role">
                                             <i data-lucide="${role==='admin'?'shield-off':'shield'}" class="w-4 h-4"></i>
@@ -1072,7 +1068,6 @@
                                         <button onclick="openEditUserModal('${u._id}')" class="bg-white border border-gray-200 text-gray-500 p-2 rounded-lg hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition" title="แก้ไข"><i data-lucide="edit" class="w-4 h-4"></i></button>
                                         <button onclick="openResetPwdModal('${u._id}','${u.username}')" class="bg-white border border-gray-200 text-gray-500 p-2 rounded-lg hover:bg-yellow-50 hover:text-yellow-600 hover:border-yellow-200 transition" title="รีเซ็ตพาส"><i data-lucide="key" class="w-4 h-4"></i></button>
                                         <button onclick="toggleUser('${u._id}', ${isActive})" class="border p-1.5 rounded text-xs w-8 ${isActive?'text-green-600 border-green-200 bg-green-50':'text-gray-400 border-gray-300 hover:bg-gray-100'}" title="สถานะ">${isActive?'ON':'OFF'}</button>
-                                        ${u.lineUserId ? `<button onclick="unlinkLine('${u._id}')" class="bg-white border border-gray-200 text-gray-500 p-2 rounded-lg hover:bg-gray-100 transition" title="ปลดไลน์"><i data-lucide="unlink" class="w-4 h-4"></i></button>` : ''}
                                         <button onclick="deleteResource('users','${u._id}')" class="bg-white border border-gray-200 text-gray-400 p-2 rounded-lg hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
                                     </td>
                                 </tr>`
@@ -1103,19 +1098,19 @@
         async function approveBooking(id){ 
             const booking = state.bookings.find(x => x._id === id);
             const carId = document.getElementById(`c-${id}`).value;
-            const rawDriverId = document.getElementById(`d-${id}`).value; // รับค่าดิบจาก Select Box
+            const driverId = document.getElementById(`d-${id}`).value;
 
             if(!carId) return Swal.fire('Warning', 'กรุณาเลือกรถ', 'warning');
             
             // ถ้า User ต้องการคนขับ แต่ Admin ไม่เลือก -> แจ้งเตือน
-            if (booking.useDriver && !rawDriverId) {
+            if (booking.useDriver && !driverId) {
                 return Swal.fire('Warning', 'งานนี้ผู้จองต้องการคนขับ กรุณาเลือกคนขับ', 'warning');
             }
 
             // ถ้า User ไม่ต้องการคนขับ แล้ว Admin ไม่ได้เลือก (ค่าว่าง) -> แปลงเป็น null ส่งไปหลังบ้าน
-            const driverId = rawDriverId === "" ? null : rawDriverId;
+            const driverIdToSend = driverId === "" ? null : driverId;
 
-            const res = await api.action('put', `bookings/${id}`, { status:'approved', carId, driverId }); 
+            const res = await api.action('put', `bookings/${id}`, { status:'approved', carId, driverId: driverIdToSend }); 
             
             if(res.success) {
                 Swal.fire('Success', 'อนุมัติเรียบร้อย', 'success');
@@ -1170,22 +1165,6 @@
 
         async function endTrip(id,so){ const {value:f}=await Swal.fire({title:'คืนรถ',html:`<input id="eo" placeholder="ไมล์จบ > ${so}" class="swal2-input"><input id="ef" placeholder="น้ำมัน" class="swal2-input"><input id="et" placeholder="ทางด่วน" class="swal2-input">`,preConfirm:()=>{return {endOdometer:document.getElementById('eo').value, fuelCost:document.getElementById('ef').value, tollCost:document.getElementById('et').value}}}); if(f){if(Number(f.endOdometer)<=Number(so))return Swal.fire('Error','ไมล์จบต้องมากกว่า','error'); await api.action('put',`bookings/${id}`,{status:'completed',...f});api.fetchData();} }
 
-        // Generate LINE Token
-        async function generateLineToken() {
-            const r = await api.action('post', 'generate-link-token', { userId: state.currentUser._id });
-            if (r.success) {
-                Swal.fire({
-                    title: '🔑 รหัสเชื่อมต่อ LINE',
-                    html: `<div class="text-3xl font-mono font-bold text-blue-600 my-4 tracking-widest">${r.data.token}</div>
-                           <p class="text-sm text-gray-600">พิมพ์คำสั่งนี้ใน LINE Bot:</p>
-                           <code class="block bg-gray-100 p-2 rounded mt-2 text-sm text-gray-800">!link ${r.data.token}</code>`,
-                    icon: 'info'
-                });
-            } else {
-                Swal.fire('Error', r.message, 'error');
-            }
-        }
-
         // Resource Mgmt Wrappers & Modals... (Same as original)
         async function addResource(e,t){ e.preventDefault(); await api.action('post',t,Object.fromEntries(new FormData(e.target))); api.fetchData(); e.target.reset(); }
         async function deleteResource(t,id){ if((await Swal.fire({title:'ยืนยันลบ?',showCancelButton:true})).isConfirmed){ await api.action('delete',`${t}/${id}`); api.fetchData(); } }
@@ -1196,7 +1175,6 @@
         function openResetPwdModal(id,u){ modalData={id,username:u}; openModal('resetPwdModal'); }
         async function handleResetPwd(e){ e.preventDefault(); await api.action('put',`users/${modalData.id}`,{password:new FormData(e.target).get('password')}); closeModal(); Swal.fire('Success'); }
         async function toggleUser(id, curr){ await api.action('put',`users/${id}`,{isActive:!curr}); api.fetchData(); }
-        async function unlinkLine(id){ if((await Swal.fire({title:'Unlink?',showCancelButton:true})).isConfirmed){ await api.action('put',`users/${id}`,{resetLine:true}); api.fetchData(); } }
         function openEditBookingModal(id){ const b=state.bookings.find(x=>x._id===id); modalData=b; document.getElementById('eb-car').innerHTML='<option value="">--</option>'+state.cars.map(c=>`<option value="${c._id}" ${b.carId?._id===c._id?'selected':''}>${c.name} (${c.plate})</option>`).join(''); document.getElementById('eb-driver').innerHTML='<option value="">--</option>'+state.drivers.map(d=>`<option value="${d._id}" ${b.driverId?._id===d._id?'selected':''}>${d.name}</option>`).join(''); document.getElementById('eb-s-odo').value=b.startOdometer||0; document.getElementById('eb-e-odo').value=b.endOdometer||0; document.getElementById('eb-fuel').value=b.fuelCost||0; document.getElementById('eb-toll').value=b.tollCost||0; openModal('editBookingModal'); }
         async function handleEditBookingSubmit(e){ e.preventDefault(); const d={carId:document.getElementById('eb-car').value||null, driverId:document.getElementById('eb-driver').value||null, startOdometer:document.getElementById('eb-s-odo').value, endOdometer:document.getElementById('eb-e-odo').value, fuelCost:document.getElementById('eb-fuel').value, tollCost:document.getElementById('eb-toll').value}; await api.action('put',`bookings/${modalData._id}`,d); closeModal(); Swal.fire('Updated'); api.fetchData(); }
 
