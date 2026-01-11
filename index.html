@@ -915,6 +915,9 @@
                             list.map(b => {
                                 const u = state.users.find(x=>x.username===b.userId)||{firstName:b.userId};
                                 const dist = (b.endOdometer && b.startOdometer) ? (b.endOdometer - b.startOdometer).toLocaleString() : '-';
+                                // Check if recoverable (Only Admin & Status is Cancelled)
+                                const canRecover = state.currentUser.role === 'admin' && b.status === 'cancelled';
+
                                 return `
                                 <tr class="hover:bg-gray-50 transition group">
                                     <td class="p-4 align-top">
@@ -947,9 +950,18 @@
                                     </td>` : ''}
                                     <td class="p-4 align-top text-center">
                                         <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase status-${b.status} text-white shadow-sm border border-white border-opacity-20">${b.status}</span>
+                                        ${b.status === 'cancelled' && b.rejectionReason ? `<div class="text-[10px] text-red-400 mt-1 italic max-w-[100px] truncate" title="${b.rejectionReason}">${b.rejectionReason}</div>` : ''}
                                     </td>
-                                    <td class="p-4 align-top text-right">
+                                    <td class="p-4 align-top text-right flex flex-col gap-1 items-end">
                                         ${state.currentUser.role==='admin' ? `<button onclick="openEditBookingModal('${b._id}')" class="text-blue-600 bg-white border border-blue-200 p-2 rounded-lg hover:bg-blue-50 transition shadow-sm" title="แก้ไขข้อมูล"><i data-lucide="edit-3" class="w-4 h-4"></i></button>` : ''}
+                                        ${canRecover ? `
+                                            <button onclick="recoverBooking('${b._id}')" class="text-green-600 bg-white border border-green-200 p-2 rounded-lg hover:bg-green-50 transition shadow-sm" title="กู้คืนงาน (Recover)">
+                                                <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                                            </button>` : ''}
+                                        ${(state.currentUser.role === 'admin' && b.status === 'active') ? `
+                                            <button onclick="endTrip('${b._id}', ${b.startOdometer||0})" class="text-purple-600 bg-white border border-purple-200 p-2 rounded-lg hover:bg-purple-50 transition shadow-sm" title="จบงาน/คืนรถ (Admin)">
+                                                <i data-lucide="check-circle" class="w-4 h-4"></i>
+                                            </button>` : ''}
                                     </td>
                                 </tr>`;
                             }).join('')}
@@ -1203,6 +1215,79 @@
             } 
         }
 
+        // 🆕 ฟังก์ชันสำหรับกู้คืนงาน (Recover)
+        async function recoverBooking(id) {
+            const { value: mode } = await Swal.fire({
+                title: 'กู้คืนงานนี้?',
+                text: "งานที่ถูกยกเลิกจะกลับมาใช้งานได้อีกครั้ง",
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#10b981',
+                cancelButtonColor: '#6b7280',
+                confirmButtonText: 'ใช่, กู้คืน',
+                cancelButtonText: 'ยกเลิก',
+                input: 'radio',
+                inputOptions: {
+                    'approved': 'คืนสถานะ: อนุมัติแล้ว (Approved)',
+                    'active': 'คืนสถานะ: กำลังใช้งาน (Active - เริ่มวิ่งทันที)'
+                },
+                inputValue: 'approved',
+                inputValidator: (value) => {
+                    if (!value) {
+                        return 'กรุณาเลือกสถานะที่ต้องการกู้คืน'
+                    }
+                }
+            });
+
+            if (mode) {
+                let startOdo = 0;
+                // ถ้าเลือก Active ต้องถามเลขไมล์ด้วย
+                if (mode === 'active') {
+                    const b = state.bookings.find(x => x._id === id);
+                    let currentCarOdo = 0;
+                    if(b.carId){
+                        const r = await axios.get(`${API_URL}/cars`);
+                        const c = r.data.find(x => x._id === (b.carId._id || b.carId));
+                        if(c) currentCarOdo = c.currentOdometer || 0;
+                    }
+
+                    const { value: odo } = await Swal.fire({
+                        title: 'ระบุเลขไมล์เริ่มต้น',
+                        input: 'number',
+                        inputValue: currentCarOdo,
+                        showCancelButton: true
+                    });
+                    
+                    if (!odo) return; // ยกเลิกถ้าไม่ใส่เลขไมล์
+                    startOdo = odo;
+                }
+
+                try {
+                    // ส่ง Request ไปหาหลังบ้าน (ใช้ Endpoint เดิม เพราะรองรับการเปลี่ยน Status)
+                    const payload = { 
+                        status: mode, 
+                        cancelledBy: null,      // ลบชื่อคนยกเลิก
+                        rejectionReason: null   // ลบเหตุผลการยกเลิก
+                    };
+                    
+                    if (mode === 'active') {
+                        payload.startOdometer = startOdo;
+                    }
+
+                    await api.action('put', `bookings/${id}`, payload);
+                    Swal.fire('Success', 'กู้คืนงานเรียบร้อยแล้ว', 'success');
+                    api.fetchData();
+                } catch (e) {
+                    Swal.fire('Error', e.message || 'ไม่สามารถกู้คืนได้ (เวลาอาจชนกับงานอื่น)', 'error');
+                }
+            }
+        }
+
+        // Generate LINE Token (Not used but kept for compatibility)
+        async function generateLineToken() {
+            // Not implemented in UI anymore
+        }
+
         // Resource Mgmt Wrappers & Modals... (Same as original)
         async function addResource(e,t){ e.preventDefault(); await api.action('post',t,Object.fromEntries(new FormData(e.target))); api.fetchData(); e.target.reset(); }
         async function deleteResource(t,id){ if((await Swal.fire({title:'ยืนยันลบ?',showCancelButton:true})).isConfirmed){ await api.action('delete',`${t}/${id}`); api.fetchData(); } }
@@ -1213,6 +1298,7 @@
         function openResetPwdModal(id,u){ modalData={id,username:u}; openModal('resetPwdModal'); }
         async function handleResetPwd(e){ e.preventDefault(); await api.action('put',`users/${modalData.id}`,{password:new FormData(e.target).get('password')}); closeModal(); Swal.fire('Success'); }
         async function toggleUser(id, curr){ await api.action('put',`users/${id}`,{isActive:!curr}); api.fetchData(); }
+        // function unlinkLine(id){ ... } // REMOVED
         function openEditBookingModal(id){ const b=state.bookings.find(x=>x._id===id); modalData=b; document.getElementById('eb-car').innerHTML='<option value="">--</option>'+state.cars.map(c=>`<option value="${c._id}" ${b.carId?._id===c._id?'selected':''}>${c.name} (${c.plate})</option>`).join(''); document.getElementById('eb-driver').innerHTML='<option value="">--</option>'+state.drivers.map(d=>`<option value="${d._id}" ${b.driverId?._id===d._id?'selected':''}>${d.name}</option>`).join(''); document.getElementById('eb-s-odo').value=b.startOdometer||0; document.getElementById('eb-e-odo').value=b.endOdometer||0; document.getElementById('eb-fuel').value=b.fuelCost||0; document.getElementById('eb-toll').value=b.tollCost||0; openModal('editBookingModal'); }
         async function handleEditBookingSubmit(e){ e.preventDefault(); const d={carId:document.getElementById('eb-car').value||null, driverId:document.getElementById('eb-driver').value||null, startOdometer:document.getElementById('eb-s-odo').value, endOdometer:document.getElementById('eb-e-odo').value, fuelCost:document.getElementById('eb-fuel').value, tollCost:document.getElementById('eb-toll').value}; await api.action('put',`bookings/${modalData._id}`,d); closeModal(); Swal.fire('Updated'); api.fetchData(); }
 
