@@ -326,19 +326,12 @@
                     localStorage.setItem('carBookingUser', JSON.stringify(res.data.user));
                     state.currentUser = res.data.user;
                     
-                     const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 1500, timerProgressBar: true });
+                    const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 1500, timerProgressBar: true });
                     Toast.fire({ icon: 'success', title: `ยินดีต้อนรับคุณ ${res.data.user.firstName}` });
                     
-                    // 🔧 LOGIC: Force Password Change
-                    // ถ้า User มีสถานะ mustChangePassword (เช่น ล็อกอินครั้งแรก) ให้เด้ง Modal เปลี่ยนรหัสทันที
-                    if (res.data.user.mustChangePassword) {
-                        setTimeout(() => openModal('changePwdModal'), 800);
-                    } else {
-                        setTimeout(() => api.fetchData(), 800);
-                    }
-                    
-                    renderCalendar();
-                } catch (err) {
+                    if(res.data.user.mustChangePassword) setTimeout(() => openModal('changePwdModal'), 800);
+                    else setTimeout(() => api.fetchData(), 800);
+                } catch (err) { 
                     Swal.fire({ icon: 'error', title: 'เข้าสู่ระบบไม่สำเร็จ', text: err.response?.data?.message || 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' });
                     btn.disabled = false;
                     btn.innerHTML = originalText;
