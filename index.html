@@ -93,7 +93,7 @@
         dayjs.extend(window.dayjs_plugin_isBetween);
         dayjs.locale('th');
 
-        // 🔥 CONFIGURATION
+        // 🔥 CONFIGURATION: แก้ไข URL ให้ตรงกับ Server ของคุณ
         const API_URL = 'https://obtrusive-interlinearly-everette.ngrok-free.dev/api'; 
         const DEPARTMENTS = ["Admissions", "Executive Office", "Engineer", "Food & Beverage", "Finance", "Housekeeping", "HR & TQM", "Information & Technology", "Operations", "Retails", "Sales"];
         const TRAVEL_BUFFER_MINUTES = 30;
@@ -143,7 +143,6 @@
             if (!btn) return;
             if (isLoading) {
                 btn.classList.add('btn-loading');
-                // Check if button has light background to change spinner color
                 if (btn.classList.contains('bg-white') || btn.classList.contains('bg-transparent')) {
                     btn.classList.add('btn-loading-dark');
                 }
@@ -228,7 +227,7 @@
             const buttons = document.querySelectorAll('button[data-action="start-trip"]');
             const now = dayjs();
             buttons.forEach(btn => {
-                if (btn.classList.contains('btn-loading')) return; // Skip if loading
+                if (btn.classList.contains('btn-loading')) return; 
                 
                 const startStr = btn.dataset.start; 
                 if (!startStr) return;
@@ -514,10 +513,8 @@
                                 ? '<div class="text-center text-gray-400 py-12 border-2 border-dashed border-gray-100 rounded-xl bg-gray-50 flex flex-col items-center gap-2"><i data-lucide="inbox" class="w-10 h-10 opacity-20"></i> ไม่มีรายการใหม่</div>' 
                                 : `<div class="space-y-3">
                                     ${pending.map(b => {
-                                        // 🛡️ DYNAMIC RESOURCE FILTERING
                                         const { cars: availCars, drivers: availDrivers } = getAvailableResourcesForBooking(b);
                                         const user = state.users.find(u => u.username === b.userId) || { firstName: b.userId, lastName: '', department: '' };
-                                        
                                         return `
                                         <div class="border border-gray-200 p-5 rounded-xl bg-white shadow-sm hover:shadow-md transition relative overflow-hidden group">
                                             <div class="absolute left-0 top-0 bottom-0 w-1 bg-yellow-400 group-hover:w-2 transition-all"></div>
@@ -555,8 +552,7 @@
                                                     </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                    `}).join('')}
+                                        </div>`}).join('')}
                                   </div>`
                             }
                         </div>
@@ -1083,6 +1079,10 @@
                                 const dist = (b.endOdometer && b.startOdometer) ? (b.endOdometer - b.startOdometer).toLocaleString() : '-';
                                 // Check if recoverable (Only Admin & Status is Cancelled)
                                 const canRecover = state.currentUser.role === 'admin' && b.status === 'cancelled';
+                                
+                                // ✨ NEW: Allow Admin to Cancel 'Active' trip
+                                const isAdmin = state.currentUser.role === 'admin';
+                                const isCancelable = ['pending', 'approved'].includes(b.status) || (isAdmin && b.status === 'active');
 
                                 return `
                                 <tr class="hover:bg-gray-50 transition group">
@@ -1127,6 +1127,10 @@
                                         ${(state.currentUser.role === 'admin' && b.status === 'active') ? `
                                             <button onclick="endTrip(this, '${b._id}', ${b.startOdometer||0})" class="text-purple-600 bg-white border border-purple-200 p-2 rounded-lg hover:bg-purple-50 transition shadow-sm" title="จบงาน/คืนรถ (Admin)">
                                                 <span><i data-lucide="check-circle" class="w-4 h-4"></i></span>
+                                            </button>` : ''}
+                                        ${isCancelable ? `
+                                            <button onclick="cancelBooking(this, '${b._id}')" class="text-red-500 bg-white border border-red-200 p-2 rounded-lg hover:bg-red-50 transition shadow-sm" title="ยกเลิกงาน">
+                                                <span><i data-lucide="x-circle" class="w-4 h-4"></i></span>
                                             </button>` : ''}
                                     </td>
                                 </tr>`;
@@ -1261,7 +1265,31 @@
         async function toggleUserRole(id, currentRole) { if (id === state.currentUser._id) return Swal.fire('Error', 'คุณไม่สามารถเปลี่ยนสิทธิ์ตัวเองได้', 'error'); const newRole = currentRole === 'admin' ? 'user' : 'admin'; const action = newRole === 'admin' ? 'Promote เป็น Admin' : 'Demote เป็น User'; if((await Swal.fire({title:`ยืนยัน ${action}?`, icon:'warning', showCancelButton:true})).isConfirmed){ await api.action('put', `users/${id}`, { role: newRole }); api.fetchData(); Swal.fire('Success', 'อัปเดตสิทธิ์เรียบร้อย', 'success'); } }
         async function approveBooking(btn, id){ const booking = state.bookings.find(x => x._id === id); const carId = document.getElementById(`c-${id}`).value; const driverId = document.getElementById(`d-${id}`).value; if(!carId) return Swal.fire('Warning', 'กรุณาเลือกรถ', 'warning'); if (booking.useDriver && !driverId) { return Swal.fire('Warning', 'งานนี้ผู้จองต้องการคนขับ กรุณาเลือกคนขับ', 'warning'); } setLoading(btn, true); const driverIdToSend = driverId === "" ? null : driverId; const res = await api.action('put', `bookings/${id}`, { status:'approved', carId, driverId: driverIdToSend }); if(res.success) { Swal.fire('Success', 'อนุมัติเรียบร้อย', 'success'); api.fetchData(); } else { Swal.fire('Error', res.message, 'error'); } setLoading(btn, false); }
         async function rejectBooking(btn, id) { const { value: reason } = await Swal.fire({ title: 'ระบุเหตุผล', input: 'text', showCancelButton: true }); if (reason) { setLoading(btn, true); await api.action('put', `bookings/${id}`, { status: 'rejected', rejectionReason: reason }); api.fetchData(); setLoading(btn, false); } }
-        async function cancelBooking(btn, id) { if((await Swal.fire({title:'ยืนยันยกเลิก?',showCancelButton:true})).isConfirmed){ setLoading(btn, true); await api.action('put', `bookings/${id}`, { status: 'cancelled', rejectionReason: 'User Cancelled', cancelledBy: state.currentUser.username }); api.fetchData(); setLoading(btn, false); } }
+        async function cancelBooking(btn, id) { 
+            // 🆕 Logic to detect Active Cancellation
+            const booking = state.bookings.find(b => b._id === id);
+            const isActiveCancel = booking.status === 'active';
+            
+            const result = await Swal.fire({
+                title: isActiveCancel ? '⚠️ ยกเลิกงานที่เริ่มแล้ว?' : 'ยืนยันยกเลิก?',
+                text: isActiveCancel ? "งานนี้เริ่มอัตโนมัติไปแล้ว คุณต้องการยกเลิกใช่หรือไม่?" : "",
+                icon: isActiveCancel ? 'warning' : 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#ef4444', // Red button
+                confirmButtonText: 'ใช่, ยกเลิกเดี๋ยวนี้'
+            });
+
+            if(result.isConfirmed){ 
+                setLoading(btn, true); 
+                await api.action('put', `bookings/${id}`, { 
+                    status: 'cancelled', 
+                    rejectionReason: isActiveCancel ? 'Admin Forced Cancel (Was Active)' : 'User Cancelled', 
+                    cancelledBy: state.currentUser.username 
+                }); 
+                api.fetchData(); 
+                setLoading(btn, false); 
+            } 
+        }
         async function startTrip(btn, id){ const b = state.bookings.find(x => x._id === id); const startDateTime = dayjs(`${b.startDate}T${b.startTime}`); const now = dayjs(); const unlockTime = startDateTime.subtract(TRAVEL_BUFFER_MINUTES, 'minute'); if (now.isBefore(unlockTime)) { return Swal.fire({ icon: 'warning', title: 'ยังไม่ถึงเวลาเริ่มงาน', text: `ระบบอนุญาตให้กดเริ่มได้ล่วงหน้า ${TRAVEL_BUFFER_MINUTES} นาทีเท่านั้น (${unlockTime.format('HH:mm')})` }); } let co=0; if(b.carId){ const r=await axios.get(`${API_URL}/cars`); const c=r.data.find(x=>x._id===(b.carId._id||b.carId)); if(c) co=c.currentOdometer||0; } const {value:v}=await Swal.fire({ title:'เริ่มเดินทาง', html:`<div class="mb-2">ไมล์ปัจจุบัน: <b>${co}</b></div><input id="sw1" type="number" class="swal2-input" value="${co}">`, preConfirm:()=>{ const v=document.getElementById('sw1').value; if(v<co) Swal.showValidationMessage('ห้ามต่ำกว่าเดิม'); return v; } }); if(v){ setLoading(btn, true); await api.action('put',`bookings/${id}`,{status:'active',startOdometer:v}); api.fetchData(); setLoading(btn, false); } }
         async function endTrip(btn, id,so){ const startOdo = Number(so) || 0; const {value:f}=await Swal.fire({ title:'คืนรถ', html:`<div class="text-left mb-2 text-sm text-gray-600">ไมล์เริ่มต้น: <b>${startOdo}</b></div><input id="eo" type="number" placeholder="เลขไมล์จบ (ต้องมากกว่า ${startOdo})" class="swal2-input"><input id="ef" type="number" placeholder="ค่าน้ำมัน (ถ้ามี)" class="swal2-input"><input id="et" type="number" placeholder="ค่าทางด่วน (ถ้ามี)" class="swal2-input">`, preConfirm:()=>{ const eo = document.getElementById('eo').value; const ef = document.getElementById('ef').value; const et = document.getElementById('et').value; if (!eo) return Swal.showValidationMessage('กรุณาระบุเลขไมล์จบ'); if (Number(eo) <= startOdo) return Swal.showValidationMessage('เลขไมล์จบต้องมากกว่าเลขไมล์เริ่มต้น'); return { endOdometer: Number(eo), fuelCost: Number(ef) || 0, tollCost: Number(et) || 0 }; } }); if(f){ setLoading(btn, true); try { await api.action('put',`bookings/${id}`,{status:'completed',...f}); Swal.fire('Success', 'บันทึกการคืนรถเรียบร้อย', 'success'); api.fetchData(); } catch(e) { Swal.fire('Error', e.message || 'เกิดข้อผิดพลาด', 'error'); } setLoading(btn, false); } }
         async function recoverBooking(btn, id) { const { value: mode } = await Swal.fire({ title: 'กู้คืนงานนี้?', text: "งานที่ถูกยกเลิกจะกลับมาใช้งานได้อีกครั้ง", icon: 'question', showCancelButton: true, confirmButtonColor: '#10b981', cancelButtonColor: '#6b7280', confirmButtonText: 'ใช่, กู้คืน', cancelButtonText: 'ยกเลิก', input: 'radio', inputOptions: { 'approved': 'คืนสถานะ: อนุมัติแล้ว (Approved)', 'active': 'คืนสถานะ: กำลังใช้งาน (Active - เริ่มวิ่งทันที)' }, inputValue: 'approved', inputValidator: (value) => { if (!value) { return 'กรุณาเลือกสถานะที่ต้องการกู้คืน' } } }); if (mode) { let startOdo = 0; if (mode === 'active') { const b = state.bookings.find(x => x._id === id); let currentCarOdo = 0; if(b.carId){ const r = await axios.get(`${API_URL}/cars`); const c = r.data.find(x => x._id === (b.carId._id || b.carId)); if(c) currentCarOdo = c.currentOdometer || 0; } const { value: odo } = await Swal.fire({ title: 'ระบุเลขไมล์เริ่มต้น', input: 'number', inputValue: currentCarOdo, showCancelButton: true }); if (!odo) return; startOdo = odo; } setLoading(btn, true); try { const payload = { status: mode, cancelledBy: null, rejectionReason: null }; if (mode === 'active') { payload.startOdometer = startOdo; } await api.action('put', `bookings/${id}`, payload); Swal.fire('Success', 'กู้คืนงานเรียบร้อยแล้ว', 'success'); api.fetchData(); } catch (e) { Swal.fire('Error', e.message || 'ไม่สามารถกู้คืนได้ (เวลาอาจชนกับงานอื่น)', 'error'); } setLoading(btn, false); } }
@@ -1312,24 +1340,7 @@
         function renderBulkCalendar() { const start=bulkState.currentMonth.startOf('month').startOf('week'), end=bulkState.currentMonth.endOf('month').endOf('week'), grid=document.getElementById('bulk-calendar-grid'); document.getElementById('bulk-month-label').innerText=bulkState.currentMonth.format('MMMM YYYY'); grid.innerHTML=''; let day=start; while(day.isBefore(end)){ const ds=day.format('YYYY-MM-DD'); const isSel=bulkState.selectedDates.has(ds); const isCurr=day.isSame(bulkState.currentMonth,'month'); const conflict=state.bookings.some(b=>b.status!=='maintenance'&&b.status!=='cancelled'&&dayjs(b.startDate).isSame(day,'day')&&((bulkState.resourceType==='car'&&b.carId?._id===bulkState.resourceId)||(bulkState.resourceType==='driver'&&b.driverId?._id===bulkState.resourceId))); const el=document.createElement('div'); el.className=`bulk-day ${isSel?'selected':''} ${conflict?'has-conflict':''} ${!isCurr?'opacity-30':''}`; el.innerHTML=`<span class="text-sm">${day.date()}</span>${conflict?'<div class="dot-indicator dot-conflict"></div>':''}`; el.onclick=()=>toggleBulkDate(ds); grid.appendChild(el); day=day.add(1,'day'); } }
         function toggleBulkDate(d){ if(bulkState.selectedDates.has(d)) bulkState.selectedDates.delete(d); else bulkState.selectedDates.add(d); renderBulkCalendar(); }
         function toggleBulkDayColumn(idx){ let d=bulkState.currentMonth.startOf('month'); while(d.day()!==idx) d=d.add(1,'day'); let all=true, days=[]; while(d.isSame(bulkState.currentMonth,'month')||d.isBefore(bulkState.currentMonth.endOf('month'))){ const s=d.format('YYYY-MM-DD'); days.push(s); if(!bulkState.selectedDates.has(s)) all=false; d=d.add(7,'day'); } days.forEach(x=>{if(all)bulkState.selectedDates.delete(x);else bulkState.selectedDates.add(x)}); renderBulkCalendar(); }
-        
-        async function submitBulkMaintenance(){ 
-            const btn=document.querySelector('#bulkMaintenanceModal button.bg-orange-600'); setLoading(btn, true); 
-            const rem=document.getElementById('bulk-remark').value||'ปิดปรับปรุง'; const sel=Array.from(bulkState.selectedDates); 
-            const curr=state.bookings.filter(b=>b.status==='maintenance'&&((bulkState.resourceType==='car'&&b.carId?._id===bulkState.resourceId)||(bulkState.resourceType==='driver'&&b.driverId?._id===bulkState.resourceId))); 
-            const currDs=new Set(curr.map(b=>b.startDate)); const add=sel.filter(d=>!currDs.has(d)), rems=curr.filter(b=>!bulkState.selectedDates.has(b.startDate)); 
-            
-            try { 
-                for(const b of rems) await api.action('delete',`bookings/${b._id}`); 
-                for(const d of add) {
-                    const res = await api.action('post','bookings',{startDate:d,startTime:'00:00',endDate:d,endTime:'23:59',status:'maintenance',remarks:`[ปิด] ${rem}`,userId:state.currentUser.username,carId:bulkState.resourceType==='car'?bulkState.resourceId:null,driverId:bulkState.resourceType==='driver'?bulkState.resourceId:null}); 
-                    if(!res.success) throw new Error(`วันที่ ${dayjs(d).format('DD/MM/YY')}: ${res.message}`);
-                }
-                Swal.fire('Success', 'บันทึกสำเร็จ', 'success'); closeModal(); api.fetchData(); 
-            } catch(e){ Swal.fire('Error',e.message,'error'); } 
-            setLoading(btn, false); 
-        }
-
+        async function submitBulkMaintenance(){ const btn=document.querySelector('#bulkMaintenanceModal button.bg-orange-600'); setLoading(btn, true); const rem=document.getElementById('bulk-remark').value||'ปิดปรับปรุง'; const sel=Array.from(bulkState.selectedDates); const curr=state.bookings.filter(b=>b.status==='maintenance'&&((bulkState.resourceType==='car'&&b.carId?._id===bulkState.resourceId)||(bulkState.resourceType==='driver'&&b.driverId?._id===bulkState.resourceId))); const currDs=new Set(curr.map(b=>b.startDate)); const add=sel.filter(d=>!currDs.has(d)), rems=curr.filter(b=>!bulkState.selectedDates.has(b.startDate)); try { for(const b of rems) await api.action('delete',`bookings/${b._id}`); for(const d of add) await api.action('post','bookings',{startDate:d,startTime:'00:00',endDate:d,endTime:'23:59',status:'maintenance',remarks:`[ปิด] ${rem}`,userId:state.currentUser.username,carId:bulkState.resourceType==='car'?bulkState.resourceId:null,driverId:bulkState.resourceType==='driver'?bulkState.resourceId:null}); Swal.fire('Success'); closeModal(); api.fetchData(); } catch(e){Swal.fire('Error',e.message,'error');} setLoading(btn, false); }
         function showBookingDetails(id) { const b = state.bookings.find(x => x._id === id); if(!b) return; const car = (b.carId && b.carId.name) ? b.carId : (state.cars.find(c => c._id === b.carId) || {name: '-', plate: '-'}); const driver = (b.driverId && b.driverId.name) ? b.driverId : (state.drivers.find(d => d._id === b.driverId) || {name: '-', phone: '-'}); const user = state.users.find(u => u.username === b.userId) || {firstName: b.userId, lastName: '', department: '-'}; const formatDate = (d) => dayjs(d).format('DD MMM BBBB'); Swal.fire({ html: `<div class="text-left space-y-4"><div class="flex justify-between items-start border-b pb-3"><div><h3 class="font-bold text-lg text-gray-800 leading-tight">${b.remarks || 'ไม่มีรายละเอียด'}</h3></div><span class="px-3 py-1 rounded-full text-xs font-bold uppercase status-${b.status} text-white">${b.status}</span></div><div class="flex items-center gap-3 bg-blue-50 p-3 rounded-xl border border-blue-100"><div class="flex-1"><p class="text-[10px] text-gray-500 uppercase">เริ่มต้น</p><p class="font-bold text-sm text-blue-700">${formatDate(b.startDate)}</p><p class="text-xs font-mono text-gray-600 bg-white inline-block px-1.5 rounded mt-0.5">${b.startTime}</p></div><div class="text-blue-300"><i data-lucide="arrow-right" class="w-5 h-5"></i></div><div class="flex-1 text-right"><p class="text-[10px] text-gray-500 uppercase">สิ้นสุด</p><p class="font-bold text-sm text-blue-700">${formatDate(b.endDate)}</p><p class="text-xs font-mono text-gray-600 bg-white inline-block px-1.5 rounded mt-0.5">${b.endTime}</p></div></div><div class="grid grid-cols-2 gap-3"><div class="border p-3 rounded-xl bg-white"><p class="text-[10px] text-gray-400 uppercase font-bold mb-1">ยานพาหนะ</p><p class="font-bold text-sm text-gray-800">${car.name}</p><p class="text-xs bg-gray-100 text-gray-600 inline-block px-1.5 py-0.5 rounded mt-1 font-mono">${car.plate}</p></div><div class="border p-3 rounded-xl bg-white"><p class="text-[10px] text-gray-400 uppercase font-bold mb-1">คนขับ</p><p class="font-bold text-sm text-gray-800">${driver.name}</p><p class="text-xs text-gray-500 mt-1">${driver.phone}</p></div></div></div>`, showConfirmButton: true, confirmButtonText: 'ปิดหน้าต่าง', confirmButtonColor: '#3b82f6', }); }
         function logout(){ localStorage.clear(); state.currentUser=null; renderApp(); }
         function exportCSV(){ const csv="\uFEFFDate,User,Car,Driver,Start,End,Fuel,Toll\n"+state.bookings.map(b=>`${b.startDate},"${b.userId}","${b.carId ? b.carId.name + ' (' + b.carId.plate + ')' : '-'}","${b.driverId?.name||'-'}",${b.startOdometer||0},${b.endOdometer||0},${b.fuelCost||0},${b.tollCost||0}`).join('\n'); const a=document.createElement('a'); a.href='data:text/csv;charset=utf-8,'+encodeURI(csv); a.download='report.csv'; a.click(); }
