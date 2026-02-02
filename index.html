@@ -93,7 +93,7 @@
         dayjs.extend(window.dayjs_plugin_isBetween);
         dayjs.locale('th');
 
-        // 🔥 CONFIGURATION: แก้ไข URL ให้ตรงกับ Server ของคุณ
+        // 🔥 CONFIGURATION
         const API_URL = 'https://obtrusive-interlinearly-everette.ngrok-free.dev/api'; 
         const DEPARTMENTS = ["Admissions", "Executive Office", "Engineer", "Food & Beverage", "Finance", "Housekeeping", "HR & TQM", "Information & Technology", "Operations", "Retails", "Sales"];
         const TRAVEL_BUFFER_MINUTES = 30;
@@ -122,14 +122,11 @@
             currentUser: null, 
             viewMode: 'dashboard', 
             historyFilter: 'trips', 
-            bookings: [], 
-            cars: [], 
-            drivers: [], 
-            users: [], 
-            stats: {}, 
+            filters: { search: '', status: 'all', startDate: '', endDate: '' }, // Filter state
+            bookings: [], cars: [], drivers: [], users: [], stats: {}, 
             currentDate: new Date(),
-            showStats: false, // For toggling charts
-            dashboardDetailType: null // For detail view in dashboard
+            showStats: false, 
+            dashboardDetailType: null 
         };
         let modalData = {};
         let bulkState = { selectedDates: new Set(), currentMonth: dayjs(), resourceType: null, resourceId: null, resourceName: null };
@@ -396,7 +393,7 @@
             if(state.currentUser.role==='admin' && state.viewMode==='dashboard') setTimeout(renderCharts, 100);
         }
 
-        // --- 📊 ADMIN DASHBOARD (IMPROVED) ---
+        // --- 📊 ADMIN DASHBOARD ---
         function renderAdminDashboard(c) {
             const pending = state.bookings.filter(b => b.status === 'pending');
             const approved = state.bookings.filter(b => b.status === 'approved'); 
@@ -410,22 +407,10 @@
             
             if (state.dashboardDetailType) {
                 switch(state.dashboardDetailType) {
-                    case 'today': 
-                        detailTitle = 'งานวันนี้'; 
-                        detailList = todayJobs; 
-                        break;
-                    case 'active': 
-                        detailTitle = 'รถที่กำลังวิ่งอยู่'; 
-                        detailList = activeBookings; 
-                        break;
-                    case 'driver': 
-                        detailTitle = 'คนขับที่ปฏิบัติงาน'; 
-                        detailList = activeBookings.filter(b => b.driverId); 
-                        break;
-                    case 'pending':
-                        detailTitle = 'รออนุมัติ';
-                        detailList = pending;
-                        break;
+                    case 'today': detailTitle = 'งานวันนี้'; detailList = todayJobs; break;
+                    case 'active': detailTitle = 'รถที่กำลังวิ่งอยู่'; detailList = activeBookings; break;
+                    case 'driver': detailTitle = 'คนขับที่ปฏิบัติงาน'; detailList = activeBookings.filter(b => b.driverId); break;
+                    case 'pending': detailTitle = 'รออนุมัติ'; detailList = pending; break;
                 }
             }
 
@@ -455,7 +440,7 @@
                     </button>
                 </div>
 
-                <!-- 2. Expandable Detail Section (Shows when card clicked) -->
+                <!-- 2. Expandable Detail Section -->
                 ${state.dashboardDetailType ? `
                 <div class="bg-white p-6 rounded-2xl shadow-md border border-gray-200 fade-in relative">
                     <button onclick="closeDashboardDetail()" class="absolute top-4 right-4 text-gray-400 hover:text-red-500 transition"><i data-lucide="x-circle" class="w-6 h-6"></i></button>
@@ -487,23 +472,14 @@
                     
                     <div class="${state.showStats ? 'block' : 'hidden'} pt-4 px-2 fade-in">
                         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                            <div class="bg-white p-4 rounded-xl shadow-sm border h-72 flex flex-col">
-                                <h4 class="font-bold text-gray-600 text-xs mb-2">ใช้รถ (ครั้ง)</h4>
-                                <div class="relative flex-1"><canvas id="carChart"></canvas></div>
-                            </div>
-                            <div class="bg-white p-4 rounded-xl shadow-sm border h-72 flex flex-col">
-                                <h4 class="font-bold text-gray-600 text-xs mb-2">งานคนขับ (ครั้ง)</h4>
-                                <div class="relative flex-1"><canvas id="driverChart"></canvas></div>
-                            </div>
-                            <div class="bg-white p-4 rounded-xl shadow-sm border h-72 flex flex-col">
-                                <h4 class="font-bold text-gray-600 text-xs mb-2">สัดส่วนแผนก</h4>
-                                <div class="relative flex-1"><canvas id="deptChart"></canvas></div>
-                            </div>
+                            <div class="bg-white p-4 rounded-xl shadow-sm border h-72 flex flex-col"><h4 class="font-bold text-gray-600 text-xs mb-2">ใช้รถ (ครั้ง)</h4><div class="relative flex-1"><canvas id="carChart"></canvas></div></div>
+                            <div class="bg-white p-4 rounded-xl shadow-sm border h-72 flex flex-col"><h4 class="font-bold text-gray-600 text-xs mb-2">งานคนขับ (ครั้ง)</h4><div class="relative flex-1"><canvas id="driverChart"></canvas></div></div>
+                            <div class="bg-white p-4 rounded-xl shadow-sm border h-72 flex flex-col"><h4 class="font-bold text-gray-600 text-xs mb-2">สัดส่วนแผนก</h4><div class="relative flex-1"><canvas id="deptChart"></canvas></div></div>
                         </div>
                     </div>
                 </div>
 
-                <!-- 4. Main Operations (Always Visible) -->
+                <!-- 4. Main Operations -->
                 <div class="grid lg:grid-cols-3 gap-6">
                     <div class="lg:col-span-2 space-y-6">
                         <!-- Pending Approvals -->
@@ -1043,102 +1019,194 @@
 
         function renderHistoryView(c) {
              const isMaintenance = state.historyFilter === 'maintenance';
-             const list = state.bookings
-                .filter(b => isMaintenance ? b.status === 'maintenance' : b.status !== 'maintenance')
-                .sort((a,b)=>new Date(b.startDate)-new Date(a.startDate));
+
+            // Filter Logic
+            const filteredList = state.bookings.filter(b => {
+                // 1. Separation Logic: Force separate based on tab
+                if (isMaintenance) {
+                    if (b.status !== 'maintenance') return false;
+                } else {
+                    if (b.status === 'maintenance') return false;
+                }
+
+                // 2. Standard Filters
+                // Only use status filter for Normal Trips (Maintenance has only one status)
+                const matchStatus = isMaintenance ? true : (state.filters.status === 'all' || b.status === state.filters.status);
+                
+                const matchSearch = state.filters.search === '' || 
+                    b.remarks?.toLowerCase().includes(state.filters.search.toLowerCase()) || 
+                    b.userId?.toLowerCase().includes(state.filters.search.toLowerCase()) ||
+                    (b.carId && b.carId.name?.toLowerCase().includes(state.filters.search.toLowerCase())) ||
+                    (b.driverId && b.driverId.name?.toLowerCase().includes(state.filters.search.toLowerCase()));
+                
+                const bookingDate = dayjs(b.startDate);
+                const matchStart = state.filters.startDate === '' || bookingDate.isAfter(dayjs(state.filters.startDate).subtract(1, 'day'));
+                const matchEnd = state.filters.endDate === '' || bookingDate.isBefore(dayjs(state.filters.endDate).add(1, 'day'));
+
+                return matchStatus && matchSearch && matchStart && matchEnd;
+            }).sort((a,b) => new Date(b.startDate) - new Date(a.startDate)); // Descending
+
+            // Summary Calculation
+            const totalItems = filteredList.length;
+            const totalFuel = !isMaintenance ? filteredList.reduce((sum, b) => sum + (b.fuelCost || 0), 0) : 0;
+            const totalToll = !isMaintenance ? filteredList.reduce((sum, b) => sum + (b.tollCost || 0), 0) : 0;
+            
+            // Maintenance Summary
+            const distinctCars = isMaintenance ? new Set(filteredList.filter(b=>b.carId).map(b=>b.carId._id)).size : 0;
+            const distinctDrivers = isMaintenance ? new Set(filteredList.filter(b=>b.driverId).map(b=>b.driverId._id)).size : 0;
 
             c.innerHTML = `
-            <div class="bg-white p-6 rounded-2xl shadow-sm border">
-                <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-                    <h3 class="font-bold text-xl flex items-center gap-2 text-gray-800"><div class="bg-indigo-100 p-2 rounded-lg text-indigo-600"><i data-lucide="file-text"></i></div> ประวัติ & รายงาน</h3>
-                    
-                    <div class="flex gap-2 bg-gray-100 p-1 rounded-lg">
-                        <button onclick="state.historyFilter='trips';renderApp()" class="${!isMaintenance ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:bg-gray-200'} px-4 py-1.5 rounded-md text-xs font-bold transition">รายการเดินทาง</button>
-                        <button onclick="state.historyFilter='maintenance';renderApp()" class="${isMaintenance ? 'bg-orange-600 text-white shadow-sm' : 'text-gray-500 hover:bg-gray-200'} px-4 py-1.5 rounded-md text-xs font-bold transition">บันทึกซ่อมบำรุง</button>
+            <div class="space-y-6">
+                <!-- 1. Tabs & Filters -->
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                    <div class="flex flex-col md:flex-row justify-between items-end md:items-center mb-4 gap-4">
+                        <div class="flex flex-col gap-2">
+                            <h2 class="text-xl font-bold text-gray-800 flex items-center gap-2">
+                                <div class="bg-indigo-100 p-2 rounded-lg text-indigo-600"><i data-lucide="filter"></i></div>
+                                ประวัติ & รายงาน
+                            </h2>
+                            <!-- TABS -->
+                            <div class="flex gap-1 bg-gray-100 p-1 rounded-lg w-fit">
+                                <button onclick="state.historyFilter='trips';renderApp()" class="${!isMaintenance ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:bg-gray-200'} px-4 py-1.5 rounded-md text-sm font-bold transition flex items-center gap-2"><i data-lucide="car"></i> งานเดินรถ</button>
+                                <button onclick="state.historyFilter='maintenance';renderApp()" class="${isMaintenance ? 'bg-orange-100 text-orange-600 shadow-sm' : 'text-gray-500 hover:bg-gray-200'} px-4 py-1.5 rounded-md text-sm font-bold transition flex items-center gap-2"><i data-lucide="wrench"></i> แจ้งซ่อม/หยุด</button>
+                            </div>
+                        </div>
+                        <div class="flex gap-2">
+                             <button onclick="resetFilters()" class="text-sm text-gray-500 hover:text-gray-700 underline">ล้างค่า</button>
+                             <button onclick="exportCSV()" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow hover:bg-green-700 transition flex items-center gap-2"><i data-lucide="download"></i> Export</button>
+                        </div>
                     </div>
-
-                    <button onclick="exportCSV()" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 shadow hover:bg-green-700 transition"><i data-lucide="download"></i> Export CSV</button>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+                        <div class="relative md:col-span-${isMaintenance ? '2' : '1'}">
+                            <i data-lucide="search" class="absolute left-3 top-2.5 w-4 h-4 text-gray-400"></i>
+                            <input type="text" value="${state.filters.search}" oninput="updateFilter('search', this.value)" 
+                                placeholder="ค้นหา (ชื่อ, รถ, รายละเอียด)..." 
+                                class="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition">
+                        </div>
+                        
+                        ${!isMaintenance ? `
+                        <select onchange="updateFilter('status', this.value)" class="border border-gray-200 p-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer">
+                            <option value="all" ${state.filters.status==='all'?'selected':''}>สถานะ: ทั้งหมด</option>
+                            <option value="pending" ${state.filters.status==='pending'?'selected':''}>🟡 รออนุมัติ</option>
+                            <option value="approved" ${state.filters.status==='approved'?'selected':''}>🔵 อนุมัติแล้ว</option>
+                            <option value="active" ${state.filters.status==='active'?'selected':''}>🟢 กำลังดำเนินการ</option>
+                            <option value="completed" ${state.filters.status==='completed'?'selected':''}>🏁 จบงานแล้ว</option>
+                            <option value="cancelled" ${state.filters.status==='cancelled'?'selected':''}>❌ ยกเลิก</option>
+                        </select>` : ''}
+                        
+                        <input type="date" value="${state.filters.startDate}" onchange="updateFilter('startDate', this.value)" class="border border-gray-200 p-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 text-gray-600">
+                        <input type="date" value="${state.filters.endDate}" onchange="updateFilter('endDate', this.value)" class="border border-gray-200 p-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 text-gray-600">
+                    </div>
                 </div>
-                <div class="overflow-x-auto rounded-xl border border-gray-200">
-                    <table class="w-full text-left text-sm border-collapse">
-                        <thead class="bg-gray-50 text-gray-600 font-bold text-xs uppercase tracking-wider">
-                            <tr>
-                                <th class="p-4 border-b">วันที่ / เวลา</th>
-                                <th class="p-4 border-b">รายละเอียด</th>
-                                <th class="p-4 border-b">รถ / คนขับ</th>
-                                <th class="p-4 border-b text-right">${isMaintenance ? 'หมายเหตุ' : 'เลขไมล์ (km)'}</th>
-                                ${!isMaintenance ? '<th class="p-4 border-b text-right">ค่าใช้จ่าย (บาท)</th>' : ''}
-                                <th class="p-4 border-b text-center">สถานะ</th>
-                                <th class="p-4 border-b text-right">จัดการ</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-gray-100">
-                            ${list.length === 0 ? `<tr><td colspan="7" class="p-8 text-center text-gray-400">ไม่มีข้อมูล</td></tr>` : 
-                            list.map(b => {
-                                const u = state.users.find(x=>x.username===b.userId)||{firstName:b.userId};
-                                const dist = (b.endOdometer && b.startOdometer) ? (b.endOdometer - b.startOdometer).toLocaleString() : '-';
-                                // Check if recoverable (Only Admin & Status is Cancelled)
-                                const canRecover = state.currentUser.role === 'admin' && b.status === 'cancelled';
-                                
-                                // ✨ NEW: Allow Admin to Cancel 'Active' trip
-                                const isAdmin = state.currentUser.role === 'admin';
-                                const isCancelable = ['pending', 'approved'].includes(b.status) || (isAdmin && b.status === 'active');
 
-                                return `
-                                <tr class="hover:bg-gray-50 transition group">
-                                    <td class="p-4 align-top">
-                                        <div class="font-bold text-gray-800">${dayjs(b.startDate).format('DD/MM/YY')}</div>
-                                        <div class="text-xs text-gray-500 font-mono mt-1">${b.startTime} - ${b.endTime}</div>
-                                    </td>
-                                    <td class="p-4 align-top">
-                                        <div class="font-medium text-gray-900 line-clamp-2" title="${b.remarks}">${b.remarks.replace('[ปิด]', '')}</div>
-                                        <div class="text-xs text-gray-500 mt-1 flex items-center gap-1"><i data-lucide="user" class="w-3 h-3"></i> ${u.firstName}</div>
-                                    </td>
-                                    <td class="p-4 align-top">
-                                        <div class="text-xs font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded inline-block mb-1">🚘 ${b.carId?.name||'-'} ${b.carId?.plate ? `(${b.carId.plate})` : ''}</div>
-                                        <div class="text-xs font-medium text-green-700 bg-green-50 px-2 py-0.5 rounded inline-block">👨‍✈️ ${b.driverId?.name||'-'}</div>
-                                    </td>
-                                    <td class="p-4 align-top text-right">
-                                        ${isMaintenance 
-                                            ? `<span class="text-gray-500 text-xs italic">${b.remarks}</span>`
-                                            : `
-                                                <div class="text-gray-900 font-mono text-xs">Start: <span class="font-bold">${b.startOdometer?.toLocaleString()||'-'}</span></div>
-                                                <div class="text-gray-900 font-mono text-xs">End: <span class="font-bold">${b.endOdometer?.toLocaleString()||'-'}</span></div>
-                                                ${dist!=='-'?`<div class="text-[10px] text-blue-600 font-bold mt-1 bg-blue-50 inline-block px-1 rounded">+${dist} km</div>`:''}
-                                            `
-                                        }
-                                    </td>
-                                    ${!isMaintenance ? `
-                                    <td class="p-4 align-top text-right text-xs">
-                                        <div>⛽ ${b.fuelCost?.toLocaleString()||0}</div>
-                                        <div>🛣️ ${b.tollCost?.toLocaleString()||0}</div>
-                                        <div class="border-t mt-1 pt-1 font-bold text-gray-700">Total: ${((b.fuelCost||0)+(b.tollCost||0)).toLocaleString()}</div>
-                                    </td>` : ''}
-                                    <td class="p-4 align-top text-center">
-                                        <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase status-${b.status} text-white shadow-sm border border-white border-opacity-20">${b.status}</span>
-                                        ${b.status === 'cancelled' && b.rejectionReason ? `<div class="text-[10px] text-red-400 mt-1 italic max-w-[100px] truncate" title="${b.rejectionReason}">${b.rejectionReason}</div>` : ''}
-                                    </td>
-                                    <td class="p-4 align-top text-right flex flex-col gap-1 items-end">
-                                        ${state.currentUser.role==='admin' ? `<button onclick="openEditBookingModal('${b._id}')" class="text-blue-600 bg-white border border-blue-200 p-2 rounded-lg hover:bg-blue-50 transition shadow-sm" title="แก้ไขข้อมูล"><i data-lucide="edit-3" class="w-4 h-4"></i></button>` : ''}
-                                        ${canRecover ? `
-                                            <button onclick="recoverBooking(this, '${b._id}')" class="text-green-600 bg-white border border-green-200 p-2 rounded-lg hover:bg-green-50 transition shadow-sm" title="กู้คืนงาน (Recover)">
-                                                <span><i data-lucide="rotate-ccw" class="w-4 h-4"></i></span>
-                                            </button>` : ''}
-                                        ${(state.currentUser.role === 'admin' && b.status === 'active') ? `
-                                            <button onclick="endTrip(this, '${b._id}', ${b.startOdometer||0})" class="text-purple-600 bg-white border border-purple-200 p-2 rounded-lg hover:bg-purple-50 transition shadow-sm" title="จบงาน/คืนรถ (Admin)">
-                                                <span><i data-lucide="check-circle" class="w-4 h-4"></i></span>
-                                            </button>` : ''}
-                                        ${isCancelable ? `
-                                            <button onclick="cancelBooking(this, '${b._id}')" class="text-red-500 bg-white border border-red-200 p-2 rounded-lg hover:bg-red-50 transition shadow-sm" title="ยกเลิกงาน">
-                                                <span><i data-lucide="x-circle" class="w-4 h-4"></i></span>
-                                            </button>` : ''}
-                                    </td>
-                                </tr>`;
-                            }).join('')}
-                        </tbody>
-                    </table>
+                <!-- 2. Summary Dashboard -->
+                ${!isMaintenance ? `
+                <div class="grid grid-cols-3 gap-4">
+                    <div class="bg-indigo-50 p-4 rounded-xl border border-indigo-100">
+                        <div class="text-xs text-indigo-500 font-bold uppercase">จำนวนรายการ</div>
+                        <div class="text-2xl font-black text-indigo-700 mt-1">${totalItems}</div>
+                    </div>
+                    <div class="bg-orange-50 p-4 rounded-xl border border-orange-100">
+                        <div class="text-xs text-orange-500 font-bold uppercase">ค่าน้ำมันรวม</div>
+                        <div class="text-2xl font-black text-orange-700 mt-1">${totalFuel.toLocaleString()} <span class="text-xs">฿</span></div>
+                    </div>
+                    <div class="bg-teal-50 p-4 rounded-xl border border-teal-100">
+                        <div class="text-xs text-teal-500 font-bold uppercase">ค่าทางด่วนรวม</div>
+                        <div class="text-2xl font-black text-teal-700 mt-1">${totalToll.toLocaleString()} <span class="text-xs">฿</span></div>
+                    </div>
+                </div>` : `
+                <div class="grid grid-cols-3 gap-4">
+                     <div class="bg-orange-50 p-4 rounded-xl border border-orange-100">
+                        <div class="text-xs text-orange-600 font-bold uppercase">รายการซ่อม/หยุด</div>
+                        <div class="text-2xl font-black text-orange-800 mt-1">${totalItems}</div>
+                    </div>
+                    <div class="bg-white p-4 rounded-xl border border-gray-200">
+                        <div class="text-xs text-gray-500 font-bold uppercase">รถที่หยุด</div>
+                        <div class="text-2xl font-black text-gray-700 mt-1">${distinctCars} <span class="text-xs font-normal">คัน</span></div>
+                    </div>
+                    <div class="bg-white p-4 rounded-xl border border-gray-200">
+                        <div class="text-xs text-gray-500 font-bold uppercase">คนขับที่ลา</div>
+                        <div class="text-2xl font-black text-gray-700 mt-1">${distinctDrivers} <span class="text-xs font-normal">คน</span></div>
+                    </div>
+                </div>
+                `}
+
+                <!-- 3. Data Grid Table -->
+                <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left">
+                            <thead class="bg-gray-50 text-gray-500 font-bold text-xs uppercase border-b border-gray-100">
+                                <tr>
+                                    <th class="p-4 whitespace-nowrap">วันที่ / เวลา</th>
+                                    <th class="p-4">รายละเอียด</th>
+                                    <th class="p-4">รถ / คนขับ</th>
+                                    <th class="p-4 text-right">${isMaintenance ? 'หมายเหตุเพิ่มเติม' : 'ระยะทาง / ค่าใช้จ่าย'}</th>
+                                    <th class="p-4 text-center">สถานะ</th>
+                                    <th class="p-4 text-right">จัดการ</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">
+                                ${filteredList.length === 0 ? `<tr><td colspan="6" class="p-12 text-center text-gray-400 flex-col items-center justify-center"><i data-lucide="search-x" class="w-10 h-10 mx-auto mb-2 opacity-50"></i>ไม่พบข้อมูลที่ค้นหา</td></tr>` : 
+                                filteredList.map(b => {
+                                    const u = state.users.find(x => x.username === b.userId) || { firstName: b.userId };
+                                    const dist = (b.endOdometer && b.startOdometer) ? (b.endOdometer - b.startOdometer).toLocaleString() : '-';
+                                    const isAdmin = state.currentUser.role === 'admin';
+                                    const canRecover = isAdmin && b.status === 'cancelled';
+                                    
+                                    return `
+                                    <tr class="hover:bg-gray-50 transition group">
+                                        <td class="p-4 align-top whitespace-nowrap">
+                                            <div class="font-bold text-gray-800">${dayjs(b.startDate).format('DD MMM YY')}</div>
+                                            <div class="text-xs text-gray-500 font-mono mt-1">${isMaintenance ? 'ตลอดวัน' : `${b.startTime} - ${b.endTime}`}</div>
+                                        </td>
+                                        <td class="p-4 align-top">
+                                            <div class="font-medium text-gray-900 line-clamp-2" title="${b.remarks}">${b.remarks.replace('[ปิด]', '')}</div>
+                                            <div class="text-xs text-gray-500 mt-1 flex items-center gap-1"><i data-lucide="user" class="w-3 h-3"></i> ${u.firstName}</div>
+                                        </td>
+                                        <td class="p-4 align-top">
+                                            ${isMaintenance ? (b.carId ? `<span class="text-xs font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded w-fit">🚘 ${b.carId.name}</span>` : `<span class="text-xs font-medium text-green-700 bg-green-50 px-2 py-0.5 rounded w-fit">👨‍✈️ ${b.driverId.name}</span>`) : `
+                                                <div class="flex flex-col gap-1">
+                                                    <span class="text-xs font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded w-fit">🚘 ${b.carId?.name||'-'} ${b.carId?.plate ? `(${b.carId.plate})` : ''}</span>
+                                                    <span class="text-xs font-medium text-green-700 bg-green-50 px-2 py-0.5 rounded w-fit">👨‍✈️ ${b.driverId?.name||'-'}</span>
+                                                </div>
+                                            `}
+                                        </td>
+                                        <td class="p-4 align-top text-right">
+                                            ${isMaintenance ? `<span class="text-gray-400 italic text-xs">${b.remarks}</span>` : `
+                                                <div class="text-xs text-gray-600">${dist !== '-' ? `<span class="font-bold text-blue-600">+${dist} km</span>` : '-'}</div>
+                                                ${(b.fuelCost || b.tollCost) ? `<div class="text-[10px] text-gray-400 mt-1">฿${(b.fuelCost+b.tollCost).toLocaleString()}</div>` : ''}
+                                            `}
+                                        </td>
+                                        <td class="p-4 align-top text-center">
+                                            <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase status-${b.status} text-white shadow-sm border border-white border-opacity-20">${b.status}</span>
+                                        </td>
+                                        <td class="p-4 align-top text-right">
+                                            <div class="flex justify-end gap-1">
+                                                ${!isMaintenance && isAdmin ? `<button onclick="openEditBookingModal('${b._id}')" class="text-blue-500 bg-white border border-blue-100 p-1.5 rounded hover:bg-blue-50 transition" title="แก้ไข"><i data-lucide="edit-3" class="w-4 h-4"></i></button>` : ''}
+                                                ${canRecover ? `<button onclick="recoverBooking(this, '${b._id}')" class="text-green-500 bg-white border border-green-100 p-1.5 rounded hover:bg-green-50 transition" title="กู้คืน"><i data-lucide="rotate-ccw" class="w-4 h-4"></i></button>` : ''}
+                                                ${(!isMaintenance && isAdmin && b.status === 'active') ? `<button onclick="endTrip(this, '${b._id}', ${b.startOdometer||0})" class="text-purple-500 bg-white border border-purple-100 p-1.5 rounded hover:bg-purple-50 transition" title="จบงาน"><i data-lucide="check-circle" class="w-4 h-4"></i></button>` : ''}
+                                                ${isMaintenance && isAdmin ? `<button onclick="cancelBooking(this, '${b._id}')" class="text-red-500 bg-white border border-red-100 p-1.5 rounded hover:bg-red-50 transition" title="ลบรายการ"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : ''}
+                                                ${(!isMaintenance && (state.bookings.find(booking => booking._id === b._id).status === 'active' || ['pending', 'approved'].includes(b.status))) ? `<button onclick="cancelBooking(this, '${b._id}')" class="text-red-500 bg-white border border-red-100 p-1.5 rounded hover:bg-red-50 transition" title="ยกเลิก"><i data-lucide="x-circle" class="w-4 h-4"></i></button>` : ''}
+                                            </div>
+                                        </td>
+                                    </tr>`;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>`;
+        }
+        
+        // 🔄 FILTER UTILS
+        function updateFilter(key, value) {
+            state.filters[key] = value;
+            renderApp();
+        }
+        function resetFilters() {
+            state.filters = { search: '', status: 'all', startDate: '', endDate: '' };
+            renderApp();
         }
 
         function renderCalendar(c) {
@@ -1163,19 +1231,14 @@
                         <div class="flex-1 overflow-hidden space-y-1 px-1">
                             ${events.map(b => {
                                 if (b.status === 'maintenance') {
-                                    // 🔧 Distinct View for Maintenance/Day Off
                                     const isCar = !!b.carId;
-                                    // Handle populated object or ID string safely
                                     const carName = (b.carId && typeof b.carId === 'object') ? b.carId.name : (state.cars.find(c=>c._id===b.carId)?.name || 'Unknown Car');
                                     const driverName = (b.driverId && typeof b.driverId === 'object') ? b.driverId.name : (state.drivers.find(d=>d._id===b.driverId)?.name || 'Unknown Driver');
-                                    
                                     const text = isCar ? `🔧 ${carName}` : `⛔ ${driverName}`;
                                     const remark = b.remarks.replace('[ปิด]', '').trim();
                                     const tooltip = `${isCar ? 'แจ้งซ่อม/หยุดรถ' : 'คนขับหยุดงาน'}: ${remark || '-'}`;
-                                    
                                     return `<div onclick="showBookingDetails('${b._id}')" class="event-maintenance" title="${tooltip}">${text}</div>`;
                                 } else {
-                                    // 🚗 Standard Trip View
                                     let display = `${b.startTime} ${b.remarks}`;
                                     return `<div onclick="showBookingDetails('${b._id}')" class="event-pill status-${b.status} shadow-sm" title="${display}">${display}</div>`;
                                 }
@@ -1209,7 +1272,6 @@
         }
         
         function renderUserManagement(c) {
-            // SAFE GUARD: Check if users array exists
             if (!Array.isArray(state.users)) {
                 c.innerHTML = '<div class="p-8 text-center text-gray-500">กำลังโหลดข้อมูล...</div>';
                 return;
@@ -1232,11 +1294,9 @@
                         <thead class="bg-gray-50 text-gray-500 font-bold text-xs uppercase"><tr><th class="p-4">User</th><th class="p-4">Name</th><th class="p-4">Role</th><th class="p-4">Status</th><th class="p-4 text-right">Actions</th></tr></thead>
                         <tbody>
                             ${state.users.map(u => {
-                                // SAFE GUARD: Handle potentially missing fields to prevent crash
                                 const role = u.role ? u.role : 'user';
                                 const roleDisplay = role.toUpperCase();
-                                const isActive = u.isActive !== false; // Default true
-                                
+                                const isActive = u.isActive !== false;
                                 return `
                                 <tr class="hover:bg-gray-50 transition ${!isActive?'bg-gray-100 opacity-60':''}">
                                     <td class="p-4 font-bold text-gray-700">${u.username || '-'}</td>
@@ -1260,25 +1320,21 @@
             </div>`;
         }
 
-        // --- ACTIONS WITH LOADING ---
         async function submitBooking(e){ e.preventDefault(); const btn=e.target.querySelector('button'); setLoading(btn, true); const d=Object.fromEntries(new FormData(e.target)); const r=await api.action('post','bookings',d); if(r.success){Swal.fire('Success','จองสำเร็จ รออนุมัติ','success'); api.fetchData(); e.target.reset(); document.getElementById('avail-badge').classList.add('hidden');} else{Swal.fire('Error',r.message,'error');} setLoading(btn, false); }
         async function toggleUserRole(id, currentRole) { if (id === state.currentUser._id) return Swal.fire('Error', 'คุณไม่สามารถเปลี่ยนสิทธิ์ตัวเองได้', 'error'); const newRole = currentRole === 'admin' ? 'user' : 'admin'; const action = newRole === 'admin' ? 'Promote เป็น Admin' : 'Demote เป็น User'; if((await Swal.fire({title:`ยืนยัน ${action}?`, icon:'warning', showCancelButton:true})).isConfirmed){ await api.action('put', `users/${id}`, { role: newRole }); api.fetchData(); Swal.fire('Success', 'อัปเดตสิทธิ์เรียบร้อย', 'success'); } }
         async function approveBooking(btn, id){ const booking = state.bookings.find(x => x._id === id); const carId = document.getElementById(`c-${id}`).value; const driverId = document.getElementById(`d-${id}`).value; if(!carId) return Swal.fire('Warning', 'กรุณาเลือกรถ', 'warning'); if (booking.useDriver && !driverId) { return Swal.fire('Warning', 'งานนี้ผู้จองต้องการคนขับ กรุณาเลือกคนขับ', 'warning'); } setLoading(btn, true); const driverIdToSend = driverId === "" ? null : driverId; const res = await api.action('put', `bookings/${id}`, { status:'approved', carId, driverId: driverIdToSend }); if(res.success) { Swal.fire('Success', 'อนุมัติเรียบร้อย', 'success'); api.fetchData(); } else { Swal.fire('Error', res.message, 'error'); } setLoading(btn, false); }
         async function rejectBooking(btn, id) { const { value: reason } = await Swal.fire({ title: 'ระบุเหตุผล', input: 'text', showCancelButton: true }); if (reason) { setLoading(btn, true); await api.action('put', `bookings/${id}`, { status: 'rejected', rejectionReason: reason }); api.fetchData(); setLoading(btn, false); } }
         async function cancelBooking(btn, id) { 
-            // 🆕 Logic to detect Active Cancellation
             const booking = state.bookings.find(b => b._id === id);
             const isActiveCancel = booking.status === 'active';
-            
             const result = await Swal.fire({
                 title: isActiveCancel ? '⚠️ ยกเลิกงานที่เริ่มแล้ว?' : 'ยืนยันยกเลิก?',
                 text: isActiveCancel ? "งานนี้เริ่มอัตโนมัติไปแล้ว คุณต้องการยกเลิกใช่หรือไม่?" : "",
                 icon: isActiveCancel ? 'warning' : 'question',
                 showCancelButton: true,
-                confirmButtonColor: '#ef4444', // Red button
+                confirmButtonColor: '#ef4444',
                 confirmButtonText: 'ใช่, ยกเลิกเดี๋ยวนี้'
             });
-
             if(result.isConfirmed){ 
                 setLoading(btn, true); 
                 await api.action('put', `bookings/${id}`, { 
@@ -1303,25 +1359,16 @@
         async function handleResetPwd(e){ e.preventDefault(); const btn=e.target.querySelector('button'); setLoading(btn, true); await api.action('put',`users/${modalData.id}`,{password:new FormData(e.target).get('password')}); closeModal(); Swal.fire('Success'); setLoading(btn, false); }
         async function toggleUser(id, curr){ await api.action('put',`users/${id}`,{isActive:!curr}); api.fetchData(); }
         
-        // 🛡️ MODIFIED: Edit Booking Modal - Show ONLY available resources
         function openEditBookingModal(id){ 
             const b=state.bookings.find(x=>x._id===id); modalData=b; 
             const { cars: availCars, drivers: availDrivers } = getAvailableResourcesForBooking(b);
-            
             let carOptions = `<option value="">-- ไม่ระบุ --</option>`;
             if(b.carId) { const cid = b.carId._id||b.carId; const cname = b.carId.name||(state.cars.find(c=>c._id===cid)?.name)||'Unknown'; carOptions+=`<option value="${cid}" selected>🚘 ${cname} (ปัจจุบัน)</option>`; }
             availCars.forEach(c => { if(b.carId && (b.carId._id===c._id || b.carId===c._id)) return; carOptions+=`<option value="${c._id}">${c.name} (${c.plate})</option>`; });
-
             let driverOptions = `<option value="">-- ไม่ใช้คนขับ --</option>`;
             if(b.driverId) { const did = b.driverId._id||b.driverId; const dname = b.driverId.name||(state.drivers.find(d=>d._id===did)?.name)||'Unknown'; driverOptions+=`<option value="${did}" selected>👨‍✈️ ${dname} (ปัจจุบัน)</option>`; }
             availDrivers.forEach(d => { if(b.driverId && (b.driverId._id===d._id || b.driverId===d._id)) return; driverOptions+=`<option value="${d._id}">${d.name}</option>`; });
-
-            document.getElementById('eb-car').innerHTML=carOptions; 
-            document.getElementById('eb-driver').innerHTML=driverOptions; 
-            document.getElementById('eb-s-odo').value=b.startOdometer||0; 
-            document.getElementById('eb-e-odo').value=b.endOdometer||0; 
-            document.getElementById('eb-fuel').value=b.fuelCost||0; 
-            document.getElementById('eb-toll').value=b.tollCost||0; 
+            document.getElementById('eb-car').innerHTML=carOptions; document.getElementById('eb-driver').innerHTML=driverOptions; document.getElementById('eb-s-odo').value=b.startOdometer||0; document.getElementById('eb-e-odo').value=b.endOdometer||0; document.getElementById('eb-fuel').value=b.fuelCost||0; document.getElementById('eb-toll').value=b.tollCost||0; 
             openModal('editBookingModal'); 
         }
 
@@ -1329,9 +1376,7 @@
             e.preventDefault(); const btn=e.target.querySelector('button'); setLoading(btn, true); 
             const d={carId:document.getElementById('eb-car').value||null, driverId:document.getElementById('eb-driver').value||null, startOdometer:document.getElementById('eb-s-odo').value, endOdometer:document.getElementById('eb-e-odo').value, fuelCost:document.getElementById('eb-fuel').value, tollCost:document.getElementById('eb-toll').value}; 
             const r = await api.action('put',`bookings/${modalData._id}`,d); 
-            if(r.success){ closeModal(); Swal.fire('Updated'); api.fetchData(); }
-            else{ Swal.fire('Failed', r.message, 'error'); }
-            setLoading(btn, false); 
+            if(r.success){ closeModal(); Swal.fire('Updated'); api.fetchData(); } else{ Swal.fire('Failed', r.message, 'error'); } setLoading(btn, false); 
         }
 
         function openExtendModal(id) { const b = state.bookings.find(x => x._id === id); modalData = b; document.getElementById('ext-date').value = b.endDate; document.getElementById('ext-time').value = b.endTime; openModal('extendModal'); }
@@ -1340,7 +1385,7 @@
         function renderBulkCalendar() { const start=bulkState.currentMonth.startOf('month').startOf('week'), end=bulkState.currentMonth.endOf('month').endOf('week'), grid=document.getElementById('bulk-calendar-grid'); document.getElementById('bulk-month-label').innerText=bulkState.currentMonth.format('MMMM YYYY'); grid.innerHTML=''; let day=start; while(day.isBefore(end)){ const ds=day.format('YYYY-MM-DD'); const isSel=bulkState.selectedDates.has(ds); const isCurr=day.isSame(bulkState.currentMonth,'month'); const conflict=state.bookings.some(b=>b.status!=='maintenance'&&b.status!=='cancelled'&&dayjs(b.startDate).isSame(day,'day')&&((bulkState.resourceType==='car'&&b.carId?._id===bulkState.resourceId)||(bulkState.resourceType==='driver'&&b.driverId?._id===bulkState.resourceId))); const el=document.createElement('div'); el.className=`bulk-day ${isSel?'selected':''} ${conflict?'has-conflict':''} ${!isCurr?'opacity-30':''}`; el.innerHTML=`<span class="text-sm">${day.date()}</span>${conflict?'<div class="dot-indicator dot-conflict"></div>':''}`; el.onclick=()=>toggleBulkDate(ds); grid.appendChild(el); day=day.add(1,'day'); } }
         function toggleBulkDate(d){ if(bulkState.selectedDates.has(d)) bulkState.selectedDates.delete(d); else bulkState.selectedDates.add(d); renderBulkCalendar(); }
         function toggleBulkDayColumn(idx){ let d=bulkState.currentMonth.startOf('month'); while(d.day()!==idx) d=d.add(1,'day'); let all=true, days=[]; while(d.isSame(bulkState.currentMonth,'month')||d.isBefore(bulkState.currentMonth.endOf('month'))){ const s=d.format('YYYY-MM-DD'); days.push(s); if(!bulkState.selectedDates.has(s)) all=false; d=d.add(7,'day'); } days.forEach(x=>{if(all)bulkState.selectedDates.delete(x);else bulkState.selectedDates.add(x)}); renderBulkCalendar(); }
-        async function submitBulkMaintenance(){ const btn=document.querySelector('#bulkMaintenanceModal button.bg-orange-600'); setLoading(btn, true); const rem=document.getElementById('bulk-remark').value||'ปิดปรับปรุง'; const sel=Array.from(bulkState.selectedDates); const curr=state.bookings.filter(b=>b.status==='maintenance'&&((bulkState.resourceType==='car'&&b.carId?._id===bulkState.resourceId)||(bulkState.resourceType==='driver'&&b.driverId?._id===bulkState.resourceId))); const currDs=new Set(curr.map(b=>b.startDate)); const add=sel.filter(d=>!currDs.has(d)), rems=curr.filter(b=>!bulkState.selectedDates.has(b.startDate)); try { for(const b of rems) await api.action('delete',`bookings/${b._id}`); for(const d of add) await api.action('post','bookings',{startDate:d,startTime:'00:00',endDate:d,endTime:'23:59',status:'maintenance',remarks:`[ปิด] ${rem}`,userId:state.currentUser.username,carId:bulkState.resourceType==='car'?bulkState.resourceId:null,driverId:bulkState.resourceType==='driver'?bulkState.resourceId:null}); Swal.fire('Success'); closeModal(); api.fetchData(); } catch(e){Swal.fire('Error',e.message,'error');} setLoading(btn, false); }
+        async function submitBulkMaintenance(){ const btn=document.querySelector('#bulkMaintenanceModal button.bg-orange-600'); setLoading(btn, true); const rem=document.getElementById('bulk-remark').value||'ปิดปรับปรุง'; const sel=Array.from(bulkState.selectedDates); const curr=state.bookings.filter(b=>b.status==='maintenance'&&((bulkState.resourceType==='car'&&b.carId?._id===bulkState.resourceId)||(bulkState.resourceType==='driver'&&b.driverId?._id===bulkState.resourceId))); const currDs=new Set(curr.map(b=>b.startDate)); const add=sel.filter(d=>!currDs.has(d)), rems=curr.filter(b=>!bulkState.selectedDates.has(b.startDate)); try { for(const b of rems) await api.action('delete',`bookings/${b._id}`); for(const d of add) { const res = await api.action('post','bookings',{startDate:d,startTime:'00:00',endDate:d,endTime:'23:59',status:'maintenance',remarks:`[ปิด] ${rem}`,userId:state.currentUser.username,carId:bulkState.resourceType==='car'?bulkState.resourceId:null,driverId:bulkState.resourceType==='driver'?bulkState.resourceId:null}); if(!res.success) throw new Error(`วันที่ ${dayjs(d).format('DD/MM/YY')}: ${res.message}`); } Swal.fire('Success', 'บันทึกสำเร็จ', 'success'); closeModal(); api.fetchData(); } catch(e){ Swal.fire('Error',e.message,'error'); } setLoading(btn, false); }
         function showBookingDetails(id) { const b = state.bookings.find(x => x._id === id); if(!b) return; const car = (b.carId && b.carId.name) ? b.carId : (state.cars.find(c => c._id === b.carId) || {name: '-', plate: '-'}); const driver = (b.driverId && b.driverId.name) ? b.driverId : (state.drivers.find(d => d._id === b.driverId) || {name: '-', phone: '-'}); const user = state.users.find(u => u.username === b.userId) || {firstName: b.userId, lastName: '', department: '-'}; const formatDate = (d) => dayjs(d).format('DD MMM BBBB'); Swal.fire({ html: `<div class="text-left space-y-4"><div class="flex justify-between items-start border-b pb-3"><div><h3 class="font-bold text-lg text-gray-800 leading-tight">${b.remarks || 'ไม่มีรายละเอียด'}</h3></div><span class="px-3 py-1 rounded-full text-xs font-bold uppercase status-${b.status} text-white">${b.status}</span></div><div class="flex items-center gap-3 bg-blue-50 p-3 rounded-xl border border-blue-100"><div class="flex-1"><p class="text-[10px] text-gray-500 uppercase">เริ่มต้น</p><p class="font-bold text-sm text-blue-700">${formatDate(b.startDate)}</p><p class="text-xs font-mono text-gray-600 bg-white inline-block px-1.5 rounded mt-0.5">${b.startTime}</p></div><div class="text-blue-300"><i data-lucide="arrow-right" class="w-5 h-5"></i></div><div class="flex-1 text-right"><p class="text-[10px] text-gray-500 uppercase">สิ้นสุด</p><p class="font-bold text-sm text-blue-700">${formatDate(b.endDate)}</p><p class="text-xs font-mono text-gray-600 bg-white inline-block px-1.5 rounded mt-0.5">${b.endTime}</p></div></div><div class="grid grid-cols-2 gap-3"><div class="border p-3 rounded-xl bg-white"><p class="text-[10px] text-gray-400 uppercase font-bold mb-1">ยานพาหนะ</p><p class="font-bold text-sm text-gray-800">${car.name}</p><p class="text-xs bg-gray-100 text-gray-600 inline-block px-1.5 py-0.5 rounded mt-1 font-mono">${car.plate}</p></div><div class="border p-3 rounded-xl bg-white"><p class="text-[10px] text-gray-400 uppercase font-bold mb-1">คนขับ</p><p class="font-bold text-sm text-gray-800">${driver.name}</p><p class="text-xs text-gray-500 mt-1">${driver.phone}</p></div></div></div>`, showConfirmButton: true, confirmButtonText: 'ปิดหน้าต่าง', confirmButtonColor: '#3b82f6', }); }
         function logout(){ localStorage.clear(); state.currentUser=null; renderApp(); }
         function exportCSV(){ const csv="\uFEFFDate,User,Car,Driver,Start,End,Fuel,Toll\n"+state.bookings.map(b=>`${b.startDate},"${b.userId}","${b.carId ? b.carId.name + ' (' + b.carId.plate + ')' : '-'}","${b.driverId?.name||'-'}",${b.startOdometer||0},${b.endOdometer||0},${b.fuelCost||0},${b.tollCost||0}`).join('\n'); const a=document.createElement('a'); a.href='data:text/csv;charset=utf-8,'+encodeURI(csv); a.download='report.csv'; a.click(); }
@@ -1363,7 +1408,7 @@
             <div id="editUserModal" class="modal fixed inset-0 bg-black/70 flex items-center justify-center p-4"><div class="bg-white p-6 rounded-2xl w-full max-w-md modal-content shadow-2xl"><h3 class="font-bold mb-6 text-lg">แก้ไขข้อมูลผู้ใช้</h3><form onsubmit="handleEditUserSubmit(event)" class="space-y-4"><div class="grid grid-cols-2 gap-4"><input id="eu-fn" name="firstName" placeholder="ชื่อ" class="w-full border p-3 rounded-lg" required><input id="eu-ln" name="lastName" placeholder="สกุล" class="w-full border p-3 rounded-lg" required></div><select id="eu-dept" name="department" class="w-full border p-3 rounded-lg bg-white" required>${DEPARTMENTS.map(d=>`<option value="${d}">${d}</option>`).join('')}</select><input id="eu-email" name="email" placeholder="Email" class="w-full border p-3 rounded-lg"><div class="flex justify-end gap-3 mt-6"><button type="button" onclick="closeModal()" class="text-gray-500">ยกเลิก</button><button class="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold"><span>บันทึก</span></button></div></form></div></div>
             <div id="editBookingModal" class="modal fixed inset-0 bg-black/70 flex items-center justify-center p-4"><div class="bg-white p-6 rounded-2xl w-full max-w-md modal-content shadow-2xl"><h3 class="font-bold mb-6 text-blue-600 text-lg">แก้ไขข้อมูลงานจอง</h3><form onsubmit="handleEditBookingSubmit(event)" class="space-y-4"><div><label class="text-xs font-bold text-gray-500">เปลี่ยนรถ (เฉพาะคันที่ว่าง)</label><select id="eb-car" class="w-full border p-2.5 rounded-lg text-sm"></select></div><div><label class="text-xs font-bold text-gray-500">เปลี่ยนคนขับ (เฉพาะคนที่ว่าง)</label><select id="eb-driver" class="w-full border p-2.5 rounded-lg text-sm"></select></div><div class="grid grid-cols-2 gap-4"><div><label class="text-xs font-bold text-gray-500">ไมล์เริ่ม</label><input type="number" id="eb-s-odo" class="w-full border p-2 rounded-lg text-sm"></div><div><label class="text-xs font-bold text-gray-500">ไมล์จบ</label><input type="number" id="eb-e-odo" class="w-full border p-2 rounded-lg text-sm"></div></div><div class="grid grid-cols-2 gap-4"><div><label class="text-xs font-bold text-gray-500">น้ำมัน</label><input type="number" id="eb-fuel" class="w-full border p-2 rounded-lg text-sm"></div><div><label class="text-xs font-bold text-gray-500">ทางด่วน</label><input type="number" id="eb-toll" class="w-full border p-2 rounded-lg text-sm"></div></div><div class="flex justify-end gap-3 mt-6"><button type="button" onclick="closeModal()" class="text-gray-500">ยกเลิก</button><button class="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold"><span>บันทึก</span></button></div></form></div></div>
             <div id="extendModal" class="modal fixed inset-0 bg-black/70 flex items-center justify-center p-4"><div class="bg-white p-6 rounded-2xl w-full max-w-sm modal-content shadow-2xl"><h3 class="font-bold mb-4 text-lg text-yellow-600">⏳ ขยายเวลาการจอง</h3><form onsubmit="handleExtendSubmit(event)" class="space-y-4"><div><label class="text-xs text-gray-500 font-bold">วันที่คืนใหม่</label><input type="date" id="ext-date" class="w-full border p-3 rounded-lg bg-yellow-50" required></div><div><label class="text-xs text-gray-500 font-bold">เวลาคืนใหม่</label><input type="time" id="ext-time" class="w-full border p-3 rounded-lg bg-yellow-50" required></div><div class="flex justify-end gap-3 mt-6"><button type="button" onclick="closeModal()" class="text-gray-500">ยกเลิก</button><button class="bg-yellow-500 text-white px-6 py-2 rounded-lg font-bold"><span>ยืนยัน</span></button></div></form></div></div>
-            <div id="bulkMaintenanceModal" class="modal fixed inset-0 bg-black/80 flex items-center justify-center p-4"><div class="bg-white p-6 rounded-2xl w-full max-w-2xl modal-content flex flex-col h-[90vh]"><div class="flex justify-between items-center mb-4"><h3 class="font-bold text-xl text-orange-600">จัดการวันหยุด/ซ่อม</h3><button onclick="closeModal()" class="text-gray-400 hover:text-gray-600"><i data-lucide="x"></i></button></div><div class="flex items-center justify-between mb-4 bg-gray-50 p-2 rounded-lg"><button onclick="bulkState.currentMonth=bulkState.currentMonth.subtract(1,'month');renderBulkCalendar()" class="p-2 hover:bg-white rounded"><i data-lucide="chevron-left"></i></button><span id="bulk-month-label" class="font-bold text-lg"></span><button onclick="bulkState.currentMonth=bulkState.currentMonth.add(1,'month');renderBulkCalendar()" class="p-2 hover:bg-white rounded"><i data-lucide="chevron-right"></i></button></div><div class="grid grid-cols-7 gap-2 mb-2 text-center text-xs font-bold text-gray-500 uppercase"><div onclick="toggleBulkDayColumn(0)" class="bulk-header">อา</div><div onclick="toggleBulkDayColumn(1)" class="bulk-header">จ</div><div onclick="toggleBulkDayColumn(2)" class="bulk-header">อ</div><div onclick="toggleBulkDayColumn(3)" class="bulk-header">พ</div><div onclick="toggleBulkDayColumn(4)" class="bulk-header">พฤ</div><div onclick="toggleBulkDayColumn(5)" class="bulk-header">ศ</div><div onclick="toggleBulkDayColumn(6)" class="bulk-header">ส</div></div><div id="bulk-calendar-grid" class="grid grid-cols-7 gap-2 flex-1 overflow-y-auto p-1"></div><div class="mt-4 pt-4 border-t space-y-3"><input id="bulk-remark" class="w-full border p-3 rounded-lg text-sm" placeholder="สาเหตุ"><div class="flex justify-end gap-3"><button onclick="closeModal()" class="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">ยกเลิก</button><button onclick="submitBulkMaintenance()" class="px-6 py-2 bg-orange-600 text-white rounded-lg font-bold"><span>บันทึก</span></button></div></div></div></div>`;
+            <div id="bulkMaintenanceModal" class="modal fixed inset-0 bg-black/80 flex items-center justify-center p-4"><div class="bg-white p-6 rounded-2xl w-full max-w-2xl modal-content flex flex-col h-[90vh]"><div class="flex justify-between items-center mb-4"><h3 class="font-bold text-xl text-orange-600">จัดการวันหยุด/ซ่อม</h3><button onclick="closeModal()" class="text-gray-400 hover:text-gray-600"><i data-lucide="x"></i></button></div><div class="flex items-center justify-between mb-4 bg-gray-50 p-2 rounded-lg"><button onclick="bulkState.currentMonth=bulkState.currentMonth.subtract(1,'month');renderBulkCalendar()" class="p-2 hover:bg-white rounded"><i data-lucide="chevron-left"></i></button><span id="bulk-month-label" class="font-bold text-lg"></span><button onclick="bulkState.currentMonth=bulkState.currentMonth.add(1,'month');renderBulkCalendar()" class="p-2 hover:bg-white rounded"><i data-lucide="chevron-right"></i></button></div><div class="grid grid-cols-7 gap-2 mb-2 text-center text-xs font-bold text-gray-500 uppercase"><div onclick="toggleBulkDayColumn(0)" class="bulk-header">อา</div><div onclick="toggleBulkDayColumn(1)" class="bulk-header">จ</div><div onclick="toggleBulkDayColumn(2)" class="bulk-header">อ</div><div onclick="toggleBulkDayColumn(3)" class="bulk-header">พ</div><div onclick="toggleBulkDayColumn(4)" class="bulk-header">พฤ</div><div onclick="toggleBulkDayColumn(5)" class="bulk-header">ศ</div><div onclick="toggleBulkDayColumn(6)" class="bulk-header">ส</div></div><div id="bulk-calendar-grid" class="grid grid-cols-7 gap-2 flex-1 overflow-y-auto p-1"></div><div class="mt-4 pt-4 border-t space-y-3"><input id="bulk-remark" class="w-full border p-3 rounded-lg text-sm" placeholder="สาเหตุ"><div class="flex justify-end gap-3"><button onclick="closeModal()" class="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">ยกเลิก</button><button onclick="submitBulkMaintenance()" class="px-6 py-2 bg-orange-600 text-white rounded-lg font-bold">บันทึก</button></div></div></div></div>`;
         }
         
         window.onload = () => { renderApp(); if(state.currentUser) api.fetchData(); };
