@@ -127,7 +127,7 @@
             currentDate: new Date(),
             showStats: false, 
             dashboardDetailType: null,
-            lineStatus: { connected: false, groupId: null }
+            lineStatus: { lineConnected: false, groupId: null }
         };
         let modalData = {};
         let bulkState = { selectedDates: new Set(), currentMonth: dayjs(), resourceType: null, resourceId: null, resourceName: null };
@@ -166,11 +166,11 @@
                         const [u, s, l] = await Promise.all([
                             axios.get(`${API_URL}/users`).catch(()=>({data:[]})), 
                             axios.get(`${API_URL}/stats`).catch(()=>({data:{}})),
-                            axios.get(`${API_URL}/system-status`).catch(()=>({data:{connected:false}}))
+                            axios.get(`${API_URL}/system-status`).catch(()=>({data:{lineConnected:false}}))
                         ]);
                         state.users = u.data || []; 
                         state.stats = s.data || {};
-                        state.lineStatus = l.data || {connected: false};
+                        state.lineStatus = l.data || {lineConnected: false};
                     } else {
                          const u = await axios.get(`${API_URL}/colleagues`).catch(()=>({data:[]}));
                          state.users = u.data || []; 
@@ -396,7 +396,7 @@
             if(state.currentUser.role==='admin' && state.viewMode==='dashboard') setTimeout(renderCharts, 100);
         }
 
-        // --- 📊 ADMIN DASHBOARD (IMPROVED) ---
+        // --- 📊 ADMIN DASHBOARD ---
         function renderAdminDashboard(c) {
             const pending = state.bookings.filter(b => b.status === 'pending');
             const approved = state.bookings.filter(b => b.status === 'approved'); 
@@ -404,24 +404,16 @@
             const todayJobs = state.bookings.filter(b => dayjs(b.startDate).isSame(today, 'day') && !['cancelled', 'rejected'].includes(b.status));
             const activeBookings = state.bookings.filter(b => b.status === 'active');
             
-            // 🆕 LINE STATUS INDICATOR
-            const lineStatusHtml = state.lineStatus.connected 
+            const lineStatusHtml = state.lineStatus.lineConnected 
                 ? `<div class="bg-green-50 p-4 rounded-xl border border-green-100 flex justify-between items-center">
-                     <div>
-                        <div class="text-xs font-bold text-green-600 uppercase mb-1">LINE Notify Status</div>
-                        <div class="flex items-center gap-2 text-green-700 font-bold"><i data-lucide="check-circle" class="w-4 h-4"></i> Online (Connected)</div>
-                     </div>
+                     <div><div class="text-xs font-bold text-green-600 uppercase mb-1">LINE Notify Status</div><div class="flex items-center gap-2 text-green-700 font-bold"><i data-lucide="check-circle" class="w-4 h-4"></i> Online (Connected)</div></div>
                      <button onclick="forceSummary(this)" class="bg-green-600 text-white px-4 py-2 rounded-lg text-xs font-bold shadow-sm hover:bg-green-700 transition">🔔 ทดสอบส่งสรุป</button>
                    </div>`
                 : `<div class="bg-red-50 p-4 rounded-xl border border-red-100 flex justify-between items-center">
-                     <div>
-                        <div class="text-xs font-bold text-red-600 uppercase mb-1">LINE Notify Status</div>
-                        <div class="flex items-center gap-2 text-red-700 font-bold"><i data-lucide="alert-circle" class="w-4 h-4"></i> Offline (Disconnected)</div>
-                     </div>
+                     <div><div class="text-xs font-bold text-red-600 uppercase mb-1">LINE Notify Status</div><div class="flex items-center gap-2 text-red-700 font-bold"><i data-lucide="alert-circle" class="w-4 h-4"></i> Offline (Disconnected)</div></div>
                      <button onclick="Swal.fire({title:'วิธีเชื่อมต่อ', html:'1. เปิดกลุ่ม LINE Admin<br>2. พิมพ์คำสั่ง <b>!setup admin</b><br>3. รอระบบตอบกลับ', icon:'info'})" class="bg-red-600 text-white px-4 py-2 rounded-lg text-xs font-bold shadow-sm hover:bg-red-700 transition">ดูวิธีแก้ไข</button>
                    </div>`;
 
-            // Logic for Detail View
             let detailTitle = '';
             let detailList = [];
             
@@ -436,709 +428,109 @@
 
             c.innerHTML = `
             <div class="space-y-6">
-                <!-- System Status -->
                 ${lineStatusHtml}
-
-                <!-- 1. Interactive Summary Cards -->
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <button onclick="showDashboardDetail('today')" class="text-left bg-white p-5 rounded-2xl shadow-sm border border-l-4 border-l-blue-500 hover:shadow-md transition group relative overflow-hidden">
-                        <div class="text-sm text-gray-500 font-medium">งานวันนี้</div>
-                        <div class="text-3xl font-bold text-gray-800 mt-1">${todayJobs.length}</div>
+                        <div class="text-sm text-gray-500 font-medium">งานวันนี้</div><div class="text-3xl font-bold text-gray-800 mt-1">${todayJobs.length}</div>
                         <div class="absolute right-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition text-blue-500"><i data-lucide="chevron-down"></i></div>
                     </button>
                     <button onclick="showDashboardDetail('active')" class="text-left bg-white p-5 rounded-2xl shadow-sm border border-l-4 border-l-green-500 hover:shadow-md transition group relative overflow-hidden">
-                        <div class="text-sm text-gray-500 font-medium">รถกำลังวิ่ง</div>
-                        <div class="text-3xl font-bold text-gray-800 mt-1">${activeBookings.length} <span class="text-xs font-normal text-gray-400">คัน</span></div>
+                        <div class="text-sm text-gray-500 font-medium">รถกำลังวิ่ง</div><div class="text-3xl font-bold text-gray-800 mt-1">${activeBookings.length} <span class="text-xs font-normal text-gray-400">คัน</span></div>
                         <div class="absolute right-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition text-green-500"><i data-lucide="chevron-down"></i></div>
                     </button>
                     <button onclick="showDashboardDetail('driver')" class="text-left bg-white p-5 rounded-2xl shadow-sm border border-l-4 border-l-purple-500 hover:shadow-md transition group relative overflow-hidden">
-                        <div class="text-sm text-gray-500 font-medium">คนขับปฏิบัติงาน</div>
-                        <div class="text-3xl font-bold text-gray-800 mt-1">${activeBookings.filter(b=>b.driverId).length} <span class="text-xs font-normal text-gray-400">คน</span></div>
+                        <div class="text-sm text-gray-500 font-medium">คนขับปฏิบัติงาน</div><div class="text-3xl font-bold text-gray-800 mt-1">${activeBookings.filter(b=>b.driverId).length} <span class="text-xs font-normal text-gray-400">คน</span></div>
                         <div class="absolute right-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition text-purple-500"><i data-lucide="chevron-down"></i></div>
                     </button>
                     <button onclick="showDashboardDetail('pending')" class="text-left bg-white p-5 rounded-2xl shadow-sm border border-l-4 border-l-yellow-500 hover:shadow-md transition group relative overflow-hidden">
-                        <div class="text-sm text-gray-500 font-medium">รออนุมัติ</div>
-                        <div class="text-3xl font-bold text-yellow-600 mt-1">${pending.length}</div>
+                        <div class="text-sm text-gray-500 font-medium">รออนุมัติ</div><div class="text-3xl font-bold text-yellow-600 mt-1">${pending.length}</div>
                         <div class="absolute right-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition text-yellow-500"><i data-lucide="chevron-down"></i></div>
                     </button>
                 </div>
-
-                <!-- 2. Expandable Detail Section -->
-                ${state.dashboardDetailType ? `
-                <div class="bg-white p-6 rounded-2xl shadow-md border border-gray-200 fade-in relative">
-                    <button onclick="closeDashboardDetail()" class="absolute top-4 right-4 text-gray-400 hover:text-red-500 transition"><i data-lucide="x-circle" class="w-6 h-6"></i></button>
-                    <h3 class="font-bold text-lg mb-4 flex items-center gap-2"><i data-lucide="list" class="text-blue-600"></i> รายละเอียด: ${detailTitle}</h3>
-                    <div class="max-h-60 overflow-y-auto custom-scrollbar">
-                        ${detailList.length === 0 ? '<p class="text-gray-400 text-sm">ไม่มีรายการ</p>' : 
-                        `<table class="w-full text-sm text-left">
-                            <thead class="bg-gray-50 text-xs font-bold text-gray-500 uppercase"><tr><th class="p-2">เวลา</th><th class="p-2">รายละเอียด</th><th class="p-2">ผู้จอง</th><th class="p-2">สถานะ</th></tr></thead>
-                            <tbody class="divide-y">
-                                ${detailList.map(b => `
-                                    <tr>
-                                        <td class="p-2 whitespace-nowrap font-mono text-gray-600">${dayjs(b.startDate).format('DD/MM')} ${b.startTime}</td>
-                                        <td class="p-2 font-medium text-gray-800">${b.remarks}</td>
-                                        <td class="p-2 text-gray-500">${b.bookedBy}</td>
-                                        <td class="p-2"><span class="px-2 py-0.5 rounded text-[10px] font-bold status-${b.status} text-white">${b.status}</span></td>
-                                    </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>`}
-                    </div>
-                </div>` : ''}
-
-                <!-- 3. Collapsible Charts Area -->
+                ${state.dashboardDetailType ? `<div class="bg-white p-6 rounded-2xl shadow-md border border-gray-200 fade-in relative"><button onclick="closeDashboardDetail()" class="absolute top-4 right-4 text-gray-400 hover:text-red-500 transition"><i data-lucide="x-circle" class="w-6 h-6"></i></button><h3 class="font-bold text-lg mb-4 flex items-center gap-2"><i data-lucide="list" class="text-blue-600"></i> รายละเอียด: ${detailTitle}</h3><div class="max-h-60 overflow-y-auto custom-scrollbar">${detailList.length === 0 ? '<p class="text-gray-400 text-sm">ไม่มีรายการ</p>' : `<table class="w-full text-sm text-left"><thead class="bg-gray-50 text-xs font-bold text-gray-500 uppercase"><tr><th class="p-2">เวลา</th><th class="p-2">รายละเอียด</th><th class="p-2">ผู้จอง</th><th class="p-2">สถานะ</th></tr></thead><tbody class="divide-y">${detailList.map(b => `<tr><td class="p-2 whitespace-nowrap font-mono text-gray-600">${dayjs(b.startDate).format('DD/MM')} ${b.startTime}</td><td class="p-2 font-medium text-gray-800">${b.remarks}</td><td class="p-2 text-gray-500">${b.bookedBy}</td><td class="p-2"><span class="px-2 py-0.5 rounded text-[10px] font-bold status-${b.status} text-white">${b.status}</span></td></tr>`).join('')}</tbody></table>`}</div></div>` : ''}
                 <div class="bg-gray-50 rounded-2xl p-2 border border-gray-200">
-                    <button onclick="toggleStats()" class="w-full flex items-center justify-between p-3 bg-white rounded-xl shadow-sm hover:bg-gray-50 transition">
-                        <span class="font-bold text-gray-700 flex items-center gap-2"><i data-lucide="bar-chart-2" class="text-blue-500"></i> สถิติการใช้งาน</span>
-                        <span class="text-xs font-bold text-gray-500 flex items-center gap-1">${state.showStats ? 'ซ่อน' : 'แสดง'} <i data-lucide="${state.showStats ? 'chevron-up' : 'chevron-down'}"></i></span>
-                    </button>
-                    
-                    <div class="${state.showStats ? 'block' : 'hidden'} pt-4 px-2 fade-in">
-                        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                            <div class="bg-white p-4 rounded-xl shadow-sm border h-72 flex flex-col"><h4 class="font-bold text-gray-600 text-xs mb-2">ใช้รถ (ครั้ง)</h4><div class="relative flex-1"><canvas id="carChart"></canvas></div></div>
-                            <div class="bg-white p-4 rounded-xl shadow-sm border h-72 flex flex-col"><h4 class="font-bold text-gray-600 text-xs mb-2">งานคนขับ (ครั้ง)</h4><div class="relative flex-1"><canvas id="driverChart"></canvas></div></div>
-                            <div class="bg-white p-4 rounded-xl shadow-sm border h-72 flex flex-col"><h4 class="font-bold text-gray-600 text-xs mb-2">สัดส่วนแผนก</h4><div class="relative flex-1"><canvas id="deptChart"></canvas></div></div>
-                        </div>
-                    </div>
+                    <button onclick="toggleStats()" class="w-full flex items-center justify-between p-3 bg-white rounded-xl shadow-sm hover:bg-gray-50 transition"><span class="font-bold text-gray-700 flex items-center gap-2"><i data-lucide="bar-chart-2" class="text-blue-500"></i> สถิติการใช้งาน</span><span class="text-xs font-bold text-gray-500 flex items-center gap-1">${state.showStats ? 'ซ่อน' : 'แสดง'} <i data-lucide="${state.showStats ? 'chevron-up' : 'chevron-down'}"></i></span></button>
+                    <div class="${state.showStats ? 'block' : 'hidden'} pt-4 px-2 fade-in"><div class="grid grid-cols-1 lg:grid-cols-3 gap-6"><div class="bg-white p-4 rounded-xl shadow-sm border h-72 flex flex-col"><h4 class="font-bold text-gray-600 text-xs mb-2">ใช้รถ (ครั้ง)</h4><div class="relative flex-1"><canvas id="carChart"></canvas></div></div><div class="bg-white p-4 rounded-xl shadow-sm border h-72 flex flex-col"><h4 class="font-bold text-gray-600 text-xs mb-2">งานคนขับ (ครั้ง)</h4><div class="relative flex-1"><canvas id="driverChart"></canvas></div></div><div class="bg-white p-4 rounded-xl shadow-sm border h-72 flex flex-col"><h4 class="font-bold text-gray-600 text-xs mb-2">สัดส่วนแผนก</h4><div class="relative flex-1"><canvas id="deptChart"></canvas></div></div></div></div>
                 </div>
-
-                <!-- 4. Main Operations -->
                 <div class="grid lg:grid-cols-3 gap-6">
                     <div class="lg:col-span-2 space-y-6">
-                        <!-- Pending Approvals -->
-                        <div class="bg-white p-6 rounded-2xl shadow-sm border">
-                            <h3 class="font-bold mb-4 flex items-center gap-2 text-blue-600"><i data-lucide="clock"></i> รายการรออนุมัติ (${pending.length})</h3>
-                            ${pending.length===0 
-                                ? '<div class="text-center text-gray-400 py-12 border-2 border-dashed border-gray-100 rounded-xl bg-gray-50 flex flex-col items-center gap-2"><i data-lucide="inbox" class="w-10 h-10 opacity-20"></i> ไม่มีรายการใหม่</div>' 
-                                : `<div class="space-y-3">
-                                    ${pending.map(b => {
-                                        const { cars: availCars, drivers: availDrivers } = getAvailableResourcesForBooking(b);
-                                        const user = state.users.find(u => u.username === b.userId) || { firstName: b.userId, lastName: '', department: '' };
-                                        return `
-                                        <div class="border border-gray-200 p-5 rounded-xl bg-white shadow-sm hover:shadow-md transition relative overflow-hidden group">
-                                            <div class="absolute left-0 top-0 bottom-0 w-1 bg-yellow-400 group-hover:w-2 transition-all"></div>
-                                            <div class="flex flex-col md:flex-row justify-between gap-4">
-                                                <div class="flex-1">
-                                                    <div class="font-bold text-gray-800 text-lg mb-1">${b.remarks}</div>
-                                                    <div class="text-sm text-gray-500 flex items-center gap-2">
-                                                        <i data-lucide="calendar" class="w-4 h-4 text-blue-500"></i> 
-                                                        ${dayjs(b.startDate).format('DD/MM/YY')} ${b.startTime} - ${dayjs(b.endDate).format('DD/MM/YY')} ${b.endTime}
-                                                    </div>
-                                                    <div class="mt-2 inline-flex items-center gap-2 text-xs">
-                                                        <span class="bg-gray-100 px-2 py-1 rounded text-gray-600 font-medium flex items-center gap-1"><i data-lucide="user" class="w-3 h-3"></i> จองโดย: ${user.firstName} ${user.lastName} (${user.department})</span>
-                                                        ${b.useDriver 
-                                                            ? '<span class="bg-green-100 text-green-700 px-2 py-1 rounded font-bold border border-green-200">ต้องการคนขับ</span>' 
-                                                            : '<span class="bg-gray-100 text-gray-500 px-2 py-1 rounded font-medium border border-gray-200">ไม่ใช้คนขับ</span>'}
-                                                    </div>
-                                                </div>
-                                                <div class="flex flex-col gap-2 min-w-[220px]">
-                                                    <select id="c-${b._id}" class="border border-gray-300 p-2 rounded-lg text-sm bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer">
-                                                        <option value="">🚘 เลือกรถ (${availCars.length} คันว่าง)</option>
-                                                        ${availCars.map(c=>`<option value="${c._id}">${c.name} (${c.plate})</option>`).join('')}
-                                                    </select>
-                                                    
-                                                    <select id="d-${b._id}" class="border border-gray-300 p-2 rounded-lg text-sm bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer">
-                                                        ${!b.useDriver 
-                                                            ? `<option value="" selected>-- ไม่ใช้คนขับ --</option>` 
-                                                            : `<option value="">👨‍✈️ เลือกคนขับ (${availDrivers.length} คนว่าง)</option>`
-                                                        }
-                                                        ${availDrivers.map(d=>`<option value="${d._id}">${d.name}</option>`).join('')}
-                                                    </select>
-
-                                                    <div class="flex gap-2 mt-1">
-                                                        <button onclick="approveBooking('${b._id}')" class="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-bold shadow-sm hover:bg-blue-700 transition"><span>อนุมัติ</span></button>
-                                                        <button onclick="rejectBooking('${b._id}')" class="flex-1 bg-white border border-red-200 text-red-500 py-2 rounded-lg text-sm font-bold hover:bg-red-50 transition"><span>ปฏิเสธ</span></button>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>`}).join('')}
-                                  </div>`
-                            }
-                        </div>
-                        
-                        <!-- Approved List -->
-                        <div class="bg-white p-6 rounded-xl shadow-sm border">
-                            <h3 class="font-bold mb-4 flex items-center gap-2 text-green-600"><i data-lucide="check-circle"></i> อนุมัติแล้ว / รอเดินทาง (${approved.length})</h3>
-                            ${approved.length===0 
-                                ? '<div class="text-center text-gray-400 py-8 border-2 border-dashed border-gray-100 rounded-xl bg-gray-50">ไม่มีรายการ</div>' 
-                                : `<div class="space-y-3">
-                                    ${approved.map(b => `
-                                        <div class="border p-4 rounded-xl mb-3 shadow-sm flex justify-between items-center bg-green-50/50 hover:bg-green-50 transition">
-                                            <div>
-                                                <div class="font-bold text-gray-800">${b.remarks}</div>
-                                                <div class="text-xs text-gray-500 flex items-center gap-1 mt-1">
-                                                    📅 ${dayjs(b.startDate).format('DD/MM/YY')} ${b.startTime} 
-                                                    <span class="text-gray-300">|</span> 
-                                                    🚘 ${b.carId?.name||'-'} ${b.carId?.plate ? `(${b.carId.plate})` : ''} 
-                                                    <span class="text-gray-300">|</span> 
-                                                    👨‍✈️ ${b.driverId?.name||'-'}
-                                                </div>
-                                            </div>
-                                            <button onclick="openEditBookingModal('${b._id}')" class="text-blue-600 bg-white border border-blue-200 px-3 py-2 rounded-lg hover:bg-blue-50 text-xs font-bold flex items-center gap-1 transition shadow-sm">
-                                                <i data-lucide="edit-3" class="w-3 h-3"></i> แก้ไข
-                                            </button>
-                                        </div>
-                                    `).join('')}
-                                  </div>`
-                            }
-                        </div>
+                        <div class="bg-white p-6 rounded-2xl shadow-sm border"><h3 class="font-bold mb-4 flex items-center gap-2 text-blue-600"><i data-lucide="clock"></i> รายการรออนุมัติ (${pending.length})</h3>${pending.length===0 ? '<div class="text-center text-gray-400 py-12 border-2 border-dashed border-gray-100 rounded-xl bg-gray-50 flex flex-col items-center gap-2"><i data-lucide="inbox" class="w-10 h-10 opacity-20"></i> ไม่มีรายการใหม่</div>' : `<div class="space-y-3">${pending.map(b => {
+                            const { cars: availCars, drivers: availDrivers } = getAvailableResourcesForBooking(b);
+                            const user = state.users.find(u => u.username === b.userId) || { firstName: b.userId, lastName: '', department: '' };
+                            return `<div class="border border-gray-200 p-5 rounded-xl bg-white shadow-sm hover:shadow-md transition relative overflow-hidden group"><div class="absolute left-0 top-0 bottom-0 w-1 bg-yellow-400 group-hover:w-2 transition-all"></div><div class="flex flex-col md:flex-row justify-between gap-4"><div class="flex-1"><div class="font-bold text-gray-800 text-lg mb-1">${b.remarks}</div><div class="text-sm text-gray-500 flex items-center gap-2"><i data-lucide="calendar" class="w-4 h-4 text-blue-500"></i> ${dayjs(b.startDate).format('DD/MM/YY')} ${b.startTime} - ${dayjs(b.endDate).format('DD/MM/YY')} ${b.endTime}</div><div class="mt-2 inline-flex items-center gap-2 text-xs"><span class="bg-gray-100 px-2 py-1 rounded text-gray-600 font-medium flex items-center gap-1"><i data-lucide="user" class="w-3 h-3"></i> จองโดย: ${user.firstName} ${user.lastName} (${user.department})</span>${b.useDriver ? '<span class="bg-green-100 text-green-700 px-2 py-1 rounded font-bold border border-green-200">ต้องการคนขับ</span>' : '<span class="bg-gray-100 text-gray-500 px-2 py-1 rounded font-medium border border-gray-200">ไม่ใช้คนขับ</span>'}</div></div><div class="flex flex-col gap-2 min-w-[220px]"><select id="c-${b._id}" class="border border-gray-300 p-2 rounded-lg text-sm bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer"><option value="">🚘 เลือกรถ (${availCars.length} คันว่าง)</option>${availCars.map(c=>`<option value="${c._id}">${c.name} (${c.plate})</option>`).join('')}</select><select id="d-${b._id}" class="border border-gray-300 p-2 rounded-lg text-sm bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer">${!b.useDriver ? `<option value="" selected>-- ไม่ใช้คนขับ --</option>` : `<option value="">👨‍✈️ เลือกคนขับ (${availDrivers.length} คนว่าง)</option>`}${availDrivers.map(d=>`<option value="${d._id}">${d.name}</option>`).join('')}</select><div class="flex gap-2 mt-1"><button onclick="approveBooking('${b._id}')" class="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-bold shadow-sm hover:bg-blue-700 transition"><span>อนุมัติ</span></button><button onclick="rejectBooking('${b._id}')" class="flex-1 bg-white border border-red-200 text-red-500 py-2 rounded-lg text-sm font-bold hover:bg-red-50 transition"><span>ปฏิเสธ</span></button></div></div></div></div>`}).join('')}</div>`}</div>
+                        <div class="bg-white p-6 rounded-xl shadow-sm border"><h3 class="font-bold mb-4 flex items-center gap-2 text-green-600"><i data-lucide="check-circle"></i> อนุมัติแล้ว / รอเดินทาง (${approved.length})</h3>${approved.length===0 ? '<div class="text-center text-gray-400 py-8 border-2 border-dashed border-gray-100 rounded-xl bg-gray-50">ไม่มีรายการ</div>' : `<div class="space-y-3">${approved.map(b => `<div class="border p-4 rounded-xl mb-3 shadow-sm flex justify-between items-center bg-green-50/50 hover:bg-green-50 transition"><div><div class="font-bold text-gray-800">${b.remarks}</div><div class="text-xs text-gray-500 flex items-center gap-1 mt-1">📅 ${dayjs(b.startDate).format('DD/MM/YY')} ${b.startTime} <span class="text-gray-300">|</span> 🚘 ${b.carId?.name||'-'} ${b.carId?.plate ? `(${b.carId.plate})` : ''} <span class="text-gray-300">|</span> 👨‍✈️ ${b.driverId?.name||'-'}</div></div><button onclick="openEditBookingModal('${b._id}')" class="text-blue-600 bg-white border border-blue-200 px-3 py-2 rounded-lg hover:bg-blue-50 text-xs font-bold flex items-center gap-1 transition shadow-sm"><i data-lucide="edit-3" class="w-3 h-3"></i> แก้ไข</button></div>`).join('')}</div>`}</div>
                     </div>
-                    
-                    <!-- Resource Management -->
                     <div class="space-y-6">
-                        <div class="bg-white p-5 rounded-2xl shadow-sm border">
-                            <h3 class="font-bold mb-4 flex items-center gap-2 text-gray-800"><div class="bg-blue-100 p-1.5 rounded"><i data-lucide="car" class="text-blue-600 w-4 h-4"></i></div> จัดการรถ</h3>
-                            <form onsubmit="addResource(event,'cars')" class="flex gap-2 mb-4"><input name="name" placeholder="ชื่อรุ่น" class="border p-2 rounded-lg text-sm flex-1 outline-none focus:border-blue-500" required><input name="plate" placeholder="ทะเบียน" class="border p-2 rounded-lg text-sm w-24 outline-none focus:border-blue-500" required><button class="bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700 transition shadow-sm"><span><i data-lucide="plus" class="w-5 h-5"></i></span></button></form>
-                            <div class="max-h-64 overflow-y-auto custom-scrollbar pr-1 space-y-2">${state.cars.map(i=>`<div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg border border-gray-100 hover:shadow-sm transition group"><div><div class="font-bold text-sm text-gray-800">${i.name}</div><div class="text-xs text-gray-500 flex items-center gap-1"><span class="bg-blue-100 text-blue-700 px-1.5 rounded font-mono">${i.plate}</span> <span>• ${i.currentOdometer?.toLocaleString()||0} km</span></div></div><div class="flex gap-1 opacity-60 group-hover:opacity-100 transition"><button onclick="openBulkMaintenanceModal('car','${i._id}','${i.name}')" class="text-orange-600 bg-white border border-orange-200 p-1.5 rounded-md hover:bg-orange-50 text-xs flex items-center gap-1 transition font-bold" title="แจ้งซ่อม"><i data-lucide="wrench" class="w-3 h-3"></i></button><button onclick="deleteResource('cars','${i._id}')" class="text-red-500 bg-white border border-red-200 p-1.5 rounded-md hover:bg-red-50 transition"><span><i data-lucide="trash-2" class="w-3 h-3"></i></span></button></div></div>`).join('')}</div>
-                        </div>
-                        <div class="bg-white p-5 rounded-2xl shadow-sm border">
-                            <h3 class="font-bold mb-4 flex items-center gap-2 text-gray-800"><div class="bg-green-100 p-1.5 rounded"><i data-lucide="users" class="text-green-600 w-4 h-4"></i></div> จัดการคนขับ</h3>
-                            <form onsubmit="addResource(event,'drivers')" class="flex gap-2 mb-4"><input name="name" placeholder="ชื่อ-สกุล" class="border p-2 rounded-lg text-sm flex-1 outline-none focus:border-green-500" required><input name="phone" placeholder="เบอร์โทร" class="border p-2 rounded-lg text-sm w-28 outline-none focus:border-green-500" required><button class="bg-green-600 text-white p-2 rounded-lg hover:bg-green-700 transition shadow-sm"><span><i data-lucide="plus" class="w-5 h-5"></i></span></button></form>
-                            <div class="max-h-64 overflow-y-auto custom-scrollbar pr-1 space-y-2">${state.drivers.map(i=>`<div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg border border-gray-100 hover:shadow-sm transition group"><div><div class="font-bold text-sm text-gray-800">${i.name}</div><div class="text-xs text-gray-500 flex items-center gap-1"><i data-lucide="phone" class="w-3 h-3"></i> ${i.phone}</div></div><div class="flex gap-1 opacity-60 group-hover:opacity-100 transition"><button onclick="openBulkMaintenanceModal('driver','${i._id}','${i.name}')" class="text-orange-600 bg-white border border-orange-200 p-1.5 rounded-md hover:bg-orange-50 text-xs flex items-center gap-1 transition font-bold" title="วันหยุด"><i data-lucide="calendar-off" class="w-3 h-3"></i></button><button onclick="deleteResource('drivers','${i._id}')" class="text-red-500 bg-white border border-red-200 p-1.5 rounded-md hover:bg-red-50 transition"><span><i data-lucide="trash-2" class="w-3 h-3"></i></span></button></div></div>`).join('')}</div>
-                        </div>
+                        <div class="bg-white p-5 rounded-2xl shadow-sm border"><h3 class="font-bold mb-4 flex items-center gap-2 text-gray-800"><div class="bg-blue-100 p-1.5 rounded"><i data-lucide="car" class="text-blue-600 w-4 h-4"></i></div> จัดการรถ</h3><form onsubmit="addResource(event,'cars')" class="flex gap-2 mb-4"><input name="name" placeholder="ชื่อรุ่น" class="border p-2 rounded-lg text-sm flex-1 outline-none focus:border-blue-500" required><input name="plate" placeholder="ทะเบียน" class="border p-2 rounded-lg text-sm w-24 outline-none focus:border-blue-500" required><button class="bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700 transition shadow-sm"><span><i data-lucide="plus" class="w-5 h-5"></i></span></button></form><div class="max-h-64 overflow-y-auto custom-scrollbar pr-1 space-y-2">${state.cars.map(i=>`<div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg border border-gray-100 hover:shadow-sm transition group"><div><div class="font-bold text-sm text-gray-800">${i.name}</div><div class="text-xs text-gray-500 flex items-center gap-1"><span class="bg-blue-100 text-blue-700 px-1.5 rounded font-mono">${i.plate}</span> <span>• ${i.currentOdometer?.toLocaleString()||0} km</span></div></div><div class="flex gap-1 opacity-60 group-hover:opacity-100 transition"><button onclick="openBulkMaintenanceModal('car','${i._id}','${i.name}')" class="text-orange-600 bg-white border border-orange-200 p-1.5 rounded-md hover:bg-orange-50 text-xs flex items-center gap-1 transition font-bold" title="แจ้งซ่อม"><i data-lucide="wrench" class="w-3 h-3"></i></button><button onclick="deleteResource('cars','${i._id}')" class="text-red-500 bg-white border border-red-200 p-1.5 rounded-md hover:bg-red-50 transition"><span><i data-lucide="trash-2" class="w-3 h-3"></i></span></button></div></div>`).join('')}</div></div>
+                        <div class="bg-white p-5 rounded-2xl shadow-sm border"><h3 class="font-bold mb-4 flex items-center gap-2 text-gray-800"><div class="bg-green-100 p-1.5 rounded"><i data-lucide="users" class="text-green-600 w-4 h-4"></i></div> จัดการคนขับ</h3><form onsubmit="addResource(event,'drivers')" class="flex gap-2 mb-4"><input name="name" placeholder="ชื่อ-สกุล" class="border p-2 rounded-lg text-sm flex-1 outline-none focus:border-green-500" required><input name="phone" placeholder="เบอร์โทร" class="border p-2 rounded-lg text-sm w-28 outline-none focus:border-green-500" required><button class="bg-green-600 text-white p-2 rounded-lg hover:bg-green-700 transition shadow-sm"><span><i data-lucide="plus" class="w-5 h-5"></i></span></button></form><div class="max-h-64 overflow-y-auto custom-scrollbar pr-1 space-y-2">${state.drivers.map(i=>`<div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg border border-gray-100 hover:shadow-sm transition group"><div><div class="font-bold text-sm text-gray-800">${i.name}</div><div class="text-xs text-gray-500 flex items-center gap-1"><i data-lucide="phone" class="w-3 h-3"></i> ${i.phone}</div></div><div class="flex gap-1 opacity-60 group-hover:opacity-100 transition"><button onclick="openBulkMaintenanceModal('driver','${i._id}','${i.name}')" class="text-orange-600 bg-white border border-orange-200 p-1.5 rounded-md hover:bg-orange-50 text-xs flex items-center gap-1 transition font-bold" title="วันหยุด"><i data-lucide="calendar-off" class="w-3 h-3"></i></button><button onclick="deleteResource('drivers','${i._id}')" class="text-red-500 bg-white border border-red-200 p-1.5 rounded-md hover:bg-red-50 transition"><span><i data-lucide="trash-2" class="w-3 h-3"></i></span></button></div></div>`).join('')}</div></div>
                     </div>
                 </div>
             </div>`;
         }
 
-        // --- NEW: Force Summary Function ---
-        async function forceSummary(btn) {
-            setLoading(btn, true);
-            const res = await api.action('get', 'force-summary');
-            if (res.success) {
-                Swal.fire('สำเร็จ', res.data.message, 'success');
-            } else {
-                Swal.fire('ผิดพลาด', res.message, 'error');
-            }
-            setLoading(btn, false);
-        }
-
-        // --- HELPERS ---
-        function toggleStats() {
-            state.showStats = !state.showStats;
-            renderApp();
-            setTimeout(renderCharts, 100); // Re-render charts
-        }
-        function showDashboardDetail(type) {
-            state.dashboardDetailType = type;
-            renderApp();
-        }
-        function closeDashboardDetail() {
-            state.dashboardDetailType = null;
-            renderApp();
-        }
-
+        // --- RENDER USER DASHBOARD ---
         function renderUserDashboard(c) {
             const today = new Date().toISOString().split('T')[0];
-            // Initialize default time values for display logic
-            const now = dayjs();
-            const defaultStart = now.format('YYYY-MM-DD');
-            const defaultStartTime = now.format('HH:mm');
-            // Default 1 hour duration
-            const defaultEnd = now.add(1, 'hour').format('YYYY-MM-DD');
-            const defaultEndTime = now.add(1, 'hour').format('HH:mm');
-
+            const now = dayjs(); const defaultStart = now.format('YYYY-MM-DD'); const defaultStartTime = now.format('HH:mm'); const defaultEnd = now.add(1, 'hour').format('YYYY-MM-DD'); const defaultEndTime = now.add(1, 'hour').format('HH:mm');
             const myBookings = state.bookings.filter(b => b.userId === state.currentUser.username && b.status !== 'maintenance');
-            
             c.innerHTML = `
             <div class="grid md:grid-cols-12 gap-8">
-                <!-- Left: Booking Form -->
                 <div class="md:col-span-5 bg-white p-6 rounded-2xl shadow-sm border h-fit sticky top-24">
-                    <div class="mb-6 pb-4 border-b border-gray-100">
-                        <h2 class="text-xl font-bold flex items-center gap-2 text-gray-800"><div class="bg-blue-100 p-2 rounded-lg text-blue-600"><i data-lucide="plus-circle" class="w-5 h-5"></i></div> จองรถใหม่</h2>
-                        <p class="text-xs text-gray-500 mt-1 pl-11">ลากแถบเพื่อระบุระยะเวลาการใช้รถ</p>
-                    </div>
-                    
+                    <div class="mb-6 pb-4 border-b border-gray-100"><h2 class="text-xl font-bold flex items-center gap-2 text-gray-800"><div class="bg-blue-100 p-2 rounded-lg text-blue-600"><i data-lucide="plus-circle" class="w-5 h-5"></i></div> จองรถใหม่</h2><p class="text-xs text-gray-500 mt-1 pl-11">ลากแถบเพื่อระบุระยะเวลาการใช้รถ</p></div>
                     <form onsubmit="submitBooking(event)" class="space-y-6">
-                        ${state.currentUser.role === 'admin' ? `
-                            <div>
-                                <label class="text-xs font-bold text-purple-600 block mb-1">👑 จองในนาม (Admin Only)</label>
-                                <select name="userId" class="w-full border p-2.5 rounded-lg text-sm bg-purple-50 focus:bg-white focus:ring-2 focus:ring-purple-500 outline-none transition cursor-pointer">
-                                    <option value="${state.currentUser.username}">จองเอง (Me)</option>
-                                    ${state.users.filter(u => u.username !== state.currentUser.username).map(u => `<option value="${u.username}">${u.firstName} ${u.lastName} (${u.department})</option>`).join('')}
-                                </select>
-                            </div>
-                        ` : `<input type="hidden" name="userId" value="${state.currentUser.username}">`}
-
-                        <!-- 🕒 START TIME & SLIDER SECTION -->
-                        <div class="bg-white p-5 rounded-xl border border-blue-100 shadow-sm relative overflow-hidden">
-                            <div class="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>
-                            
-                            <!-- Start Time Input -->
-                            <div class="mb-4">
-                                <div class="flex justify-between items-end mb-1">
-                                    <label class="text-xs font-bold text-gray-500 uppercase tracking-wide flex items-center gap-1"><i data-lucide="map-pin" class="w-3 h-3"></i> เริ่มเดินทาง</label>
-                                    <button type="button" onclick="resetToNow()" class="text-[10px] text-blue-600 hover:underline">รีเซ็ตเป็นปัจจุบัน</button>
-                                </div>
-                                <div class="flex gap-2">
-                                    <input type="date" name="startDate" id="sd" value="${defaultStart}" min="${today}" class="flex-1 border p-2 rounded-lg text-sm font-bold text-gray-700 focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50" required onchange="syncSliderTime()">
-                                    <input type="time" name="startTime" id="st" value="${defaultStartTime}" class="w-24 border p-2 rounded-lg text-sm font-bold text-gray-700 focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50" required onchange="syncSliderTime()">
-                                </div>
-                            </div>
-
-                            <!-- 📏 Duration Slider -->
-                            <div class="mb-2 pt-2 border-t border-dashed border-gray-200">
-                                <div class="flex justify-between items-center mb-2">
-                                    <span class="text-xs font-bold text-gray-500">ระยะเวลา:</span>
-                                    <span id="duration-label" class="text-lg font-black text-blue-600">1 ชม. 0 นาที</span>
-                                </div>
-                                <input type="range" id="duration-slider" min="30" max="${DEFAULT_SLIDER_MAX}" step="30" value="60" 
-                                    class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600 hover:accent-blue-500 transition-all"
-                                    oninput="updateEndTimeFromSlider(this.value)">
-                                <div class="flex justify-between text-[10px] text-gray-400 mt-1 font-mono select-none" id="slider-markers">
-                                    <span>30m</span>
-                                    <span>3h</span>
-                                    <span>6h</span>
-                                    <span>9h</span>
-                                    <span>12h</span>
-                                </div>
-                            </div>
-
-                            <!-- End Time Section with Date Picker -->
-                            <div class="mt-3 bg-blue-50 p-3 rounded-lg border border-blue-100">
-                                <div class="flex justify-between items-end mb-1">
-                                    <label class="text-xs font-bold text-blue-800 uppercase tracking-wide flex items-center gap-1">
-                                        <i data-lucide="flag" class="w-3 h-3"></i> ถึงเวลา (คืนรถ)
-                                    </label>
-                                </div>
-                                <div class="flex gap-2">
-                                    <input type="date" name="endDate" id="ed" value="${defaultEnd}" min="${today}" 
-                                        class="flex-1 border p-2 rounded-lg text-sm font-bold text-blue-900 focus:ring-2 focus:ring-blue-500 outline-none bg-white shadow-sm" 
-                                        required onchange="updateSliderFromInputs()">
-                                    <input type="time" name="endTime" id="et" value="${defaultEndTime}" 
-                                        class="w-24 border p-2 rounded-lg text-sm font-bold text-blue-900 focus:ring-2 focus:ring-blue-500 outline-none bg-white shadow-sm" 
-                                        required onchange="updateSliderFromInputs()">
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- 🚗 Car & Driver Counter Section (New) -->
-                        <div class="grid grid-cols-2 gap-4 mb-4">
-                            <!-- Car Count -->
-                            <div class="bg-gray-50 p-3 rounded-xl border border-gray-200">
-                                <label class="text-[10px] font-bold text-gray-500 uppercase tracking-wide block mb-1 flex items-center gap-1">
-                                    <i data-lucide="layers" class="w-3 h-3"></i> จำนวนรถ
-                                </label>
-                                <div class="flex items-center justify-between">
-                                    <button type="button" onclick="adjustCarCount(-1)" class="w-8 h-8 rounded-lg bg-white border border-gray-300 hover:bg-gray-100 flex items-center justify-center text-gray-600 font-bold transition shadow-sm">-</button>
-                                    <input type="number" name="carCount" id="carCount" value="1" min="1" readonly class="w-10 text-center border-none bg-transparent font-bold text-xl text-blue-600 focus:ring-0 p-0">
-                                    <button type="button" onclick="adjustCarCount(1)" class="w-8 h-8 rounded-lg bg-white border border-gray-300 hover:bg-gray-100 flex items-center justify-center text-gray-600 font-bold transition shadow-sm">+</button>
-                                </div>
-                                <div class="text-[10px] text-right text-gray-400 mt-1">สูงสุด: <span id="maxCarsLabel">-</span></div>
-                            </div>
-
-                            <!-- Driver Count -->
-                            <div class="bg-gray-50 p-3 rounded-xl border border-gray-200">
-                                <label class="text-[10px] font-bold text-gray-500 uppercase tracking-wide block mb-1 flex items-center gap-1">
-                                    <i data-lucide="user" class="w-3 h-3"></i> จำนวนคนขับ
-                                </label>
-                                <div class="flex items-center justify-between">
-                                    <button type="button" onclick="adjustDriverCount(-1)" class="w-8 h-8 rounded-lg bg-white border border-gray-300 hover:bg-gray-100 flex items-center justify-center text-gray-600 font-bold transition shadow-sm">-</button>
-                                    <input type="number" name="driverCount" id="driverCount" value="0" min="0" readonly class="w-10 text-center border-none bg-transparent font-bold text-xl text-green-600 focus:ring-0 p-0">
-                                    <button type="button" onclick="adjustDriverCount(1)" class="w-8 h-8 rounded-lg bg-white border border-gray-300 hover:bg-gray-100 flex items-center justify-center text-gray-600 font-bold transition shadow-sm">+</button>
-                                </div>
-                                <div class="text-[10px] text-right text-gray-400 mt-1">สูงสุด: <span id="maxDriversLabel">-</span></div>
-                            </div>
-                        </div>
-
-                        <!-- Availability Badge -->
-                        <div id="avail-badge" class="p-4 bg-gradient-to-r from-gray-50 to-white border border-gray-200 rounded-xl text-center shadow-inner transition-all duration-300 hidden">
-                            <div class="text-xs font-bold text-gray-400 mb-2 uppercase tracking-wide">สถานะความพร้อม (ทั้งหมด)</div>
-                            <div class="flex justify-center gap-8 text-sm">
-                                <div class="flex flex-col items-center">
-                                    <span class="text-2xl font-black text-blue-600" id="cc">0</span>
-                                    <span class="text-xs text-gray-600 font-medium flex items-center gap-1"><i data-lucide="car" class="w-3 h-3"></i> รถว่าง</span>
-                                </div>
-                                <div class="w-px bg-gray-200 h-8 self-center"></div>
-                                <div class="flex flex-col items-center">
-                                    <span class="text-2xl font-black text-green-600" id="dc">0</span>
-                                    <span class="text-xs text-gray-600 font-medium flex items-center gap-1"><i data-lucide="user" class="w-3 h-3"></i> คนขับ</span>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div>
-                            <label class="text-xs font-bold text-gray-500 block mb-1">รายละเอียดการเดินทาง</label>
-                            <textarea name="remarks" class="w-full border p-3 rounded-xl text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition" rows="3" placeholder="ระบุสถานที่, จำนวนผู้โดยสาร, เบอร์ติดต่อ..." required></textarea>
-                        </div>
-                        
-                        <button class="w-full bg-blue-600 text-white p-3.5 rounded-xl font-bold shadow-lg hover:bg-blue-700 hover:shadow-xl transition-all transform active:scale-95 flex items-center justify-center gap-2">
-                            <span>ยืนยันการจอง</span> <i data-lucide="arrow-right" class="w-4 h-4"></i>
-                        </button>
+                        ${state.currentUser.role === 'admin' ? `<div><label class="text-xs font-bold text-purple-600 block mb-1">👑 จองในนาม (Admin Only)</label><select name="userId" class="w-full border p-2.5 rounded-lg text-sm bg-purple-50 focus:bg-white focus:ring-2 focus:ring-purple-500 outline-none transition cursor-pointer"><option value="${state.currentUser.username}">จองเอง (Me)</option>${state.users.filter(u => u.username !== state.currentUser.username).map(u => `<option value="${u.username}">${u.firstName} ${u.lastName} (${u.department})</option>`).join('')}</select></div>` : `<input type="hidden" name="userId" value="${state.currentUser.username}">`}
+                        <div class="bg-white p-5 rounded-xl border border-blue-100 shadow-sm relative overflow-hidden"><div class="absolute top-0 left-0 w-1 h-full bg-blue-500"></div><div class="mb-4"><div class="flex justify-between items-end mb-1"><label class="text-xs font-bold text-gray-500 uppercase tracking-wide flex items-center gap-1"><i data-lucide="map-pin" class="w-3 h-3"></i> เริ่มเดินทาง</label><button type="button" onclick="resetToNow()" class="text-[10px] text-blue-600 hover:underline">รีเซ็ตเป็นปัจจุบัน</button></div><div class="flex gap-2"><input type="date" name="startDate" id="sd" value="${defaultStart}" min="${today}" class="flex-1 border p-2 rounded-lg text-sm font-bold text-gray-700 focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50" required onchange="syncSliderTime()"><input type="time" name="startTime" id="st" value="${defaultStartTime}" class="w-24 border p-2 rounded-lg text-sm font-bold text-gray-700 focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50" required onchange="syncSliderTime()"></div></div><div class="mb-2 pt-2 border-t border-dashed border-gray-200"><div class="flex justify-between items-center mb-2"><span class="text-xs font-bold text-gray-500">ระยะเวลา:</span><span id="duration-label" class="text-lg font-black text-blue-600">1 ชม. 0 นาที</span></div><input type="range" id="duration-slider" min="30" max="${DEFAULT_SLIDER_MAX}" step="30" value="60" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600 hover:accent-blue-500 transition-all" oninput="updateEndTimeFromSlider(this.value)"><div class="flex justify-between text-[10px] text-gray-400 mt-1 font-mono select-none" id="slider-markers"><span>30m</span><span>3h</span><span>6h</span><span>9h</span><span>12h</span></div></div><div class="mt-3 bg-blue-50 p-3 rounded-lg border border-blue-100"><div class="flex justify-between items-end mb-1"><label class="text-xs font-bold text-blue-800 uppercase tracking-wide flex items-center gap-1"><i data-lucide="flag" class="w-3 h-3"></i> ถึงเวลา (คืนรถ)</label></div><div class="flex gap-2"><input type="date" name="endDate" id="ed" value="${defaultEnd}" min="${today}" class="flex-1 border p-2 rounded-lg text-sm font-bold text-blue-900 focus:ring-2 focus:ring-blue-500 outline-none bg-white shadow-sm" required onchange="updateSliderFromInputs()"><input type="time" name="endTime" id="et" value="${defaultEndTime}" class="w-24 border p-2 rounded-lg text-sm font-bold text-blue-900 focus:ring-2 focus:ring-blue-500 outline-none bg-white shadow-sm" required onchange="updateSliderFromInputs()"></div></div></div>
+                        <div class="grid grid-cols-2 gap-4 mb-4"><div class="bg-gray-50 p-3 rounded-xl border border-gray-200"><label class="text-[10px] font-bold text-gray-500 uppercase tracking-wide block mb-1 flex items-center gap-1"><i data-lucide="layers" class="w-3 h-3"></i> จำนวนรถ</label><div class="flex items-center justify-between"><button type="button" onclick="adjustCarCount(-1)" class="w-8 h-8 rounded-lg bg-white border border-gray-300 hover:bg-gray-100 flex items-center justify-center text-gray-600 font-bold transition shadow-sm">-</button><input type="number" name="carCount" id="carCount" value="1" min="1" readonly class="w-10 text-center border-none bg-transparent font-bold text-xl text-blue-600 focus:ring-0 p-0"><button type="button" onclick="adjustCarCount(1)" class="w-8 h-8 rounded-lg bg-white border border-gray-300 hover:bg-gray-100 flex items-center justify-center text-gray-600 font-bold transition shadow-sm">+</button></div><div class="text-[10px] text-right text-gray-400 mt-1">สูงสุด: <span id="maxCarsLabel">-</span></div></div><div class="bg-gray-50 p-3 rounded-xl border border-gray-200"><label class="text-[10px] font-bold text-gray-500 uppercase tracking-wide block mb-1 flex items-center gap-1"><i data-lucide="user" class="w-3 h-3"></i> จำนวนคนขับ</label><div class="flex items-center justify-between"><button type="button" onclick="adjustDriverCount(-1)" class="w-8 h-8 rounded-lg bg-white border border-gray-300 hover:bg-gray-100 flex items-center justify-center text-gray-600 font-bold transition shadow-sm">-</button><input type="number" name="driverCount" id="driverCount" value="0" min="0" readonly class="w-10 text-center border-none bg-transparent font-bold text-xl text-green-600 focus:ring-0 p-0"><button type="button" onclick="adjustDriverCount(1)" class="w-8 h-8 rounded-lg bg-white border border-gray-300 hover:bg-gray-100 flex items-center justify-center text-gray-600 font-bold transition shadow-sm">+</button></div><div class="text-[10px] text-right text-gray-400 mt-1">สูงสุด: <span id="maxDriversLabel">-</span></div></div></div>
+                        <div id="avail-badge" class="p-4 bg-gradient-to-r from-gray-50 to-white border border-gray-200 rounded-xl text-center shadow-inner transition-all duration-300 hidden"><div class="text-xs font-bold text-gray-400 mb-2 uppercase tracking-wide">สถานะความพร้อม (ทั้งหมด)</div><div class="flex justify-center gap-8 text-sm"><div class="flex flex-col items-center"><span class="text-2xl font-black text-blue-600" id="cc">0</span><span class="text-xs text-gray-600 font-medium flex items-center gap-1"><i data-lucide="car" class="w-3 h-3"></i> รถว่าง</span></div><div class="w-px bg-gray-200 h-8 self-center"></div><div class="flex flex-col items-center"><span class="text-2xl font-black text-green-600" id="dc">0</span><span class="text-xs text-gray-600 font-medium flex items-center gap-1"><i data-lucide="user" class="w-3 h-3"></i> คนขับ</span></div></div></div>
+                        <div><label class="text-xs font-bold text-gray-500 block mb-1">รายละเอียดการเดินทาง</label><textarea name="remarks" class="w-full border p-3 rounded-xl text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition" rows="3" placeholder="ระบุสถานที่, จำนวนผู้โดยสาร, เบอร์ติดต่อ..." required></textarea></div>
+                        <button class="w-full bg-blue-600 text-white p-3.5 rounded-xl font-bold shadow-lg hover:bg-blue-700 hover:shadow-xl transition-all transform active:scale-95 flex items-center justify-center gap-2"><span>ยืนยันการจอง</span> <i data-lucide="arrow-right" class="w-4 h-4"></i></button>
                     </form>
                 </div>
-
-                <!-- Right: Booking History -->
                 <div class="md:col-span-7 space-y-4">
-                    <div class="bg-white p-6 rounded-2xl shadow-sm border">
-                        <div class="flex justify-between items-center mb-6">
-                            <h3 class="font-bold text-lg text-gray-800">ประวัติการจองของฉัน</h3>
-                            <span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">${myBookings.length} รายการ</span>
-                        </div>
-                        
-                        ${myBookings.length===0 
-                            ? `<div class="text-center text-gray-400 py-12 border-2 border-dashed border-gray-100 rounded-xl bg-gray-50">
-                                <i data-lucide="calendar-off" class="w-10 h-10 mx-auto mb-2 opacity-30"></i>
-                                ยังไม่มีรายการจอง
-                               </div>` 
-                            : `<div class="space-y-3">
-                                ${myBookings.map(b => `
-                                    <div class="border border-gray-100 p-5 rounded-2xl bg-white hover:shadow-md transition group relative overflow-hidden">
-                                        <div class="flex justify-between items-start relative z-10">
-                                            <div>
-                                                <div class="flex items-center gap-2 mb-2">
-                                                    <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide border status-${b.status} bg-opacity-10 text-opacity-80 border-opacity-20" style="color:var(--status-color); border-color:var(--status-color);">
-                                                        ${b.status}
-                                                    </span>
-                                                    <span class="text-xs text-gray-400 font-mono">${dayjs(b.createdAt).format('DD/MM/YY')}</span>
-                                                </div>
-                                                <div class="font-bold text-lg text-gray-800 group-hover:text-blue-600 transition">${b.remarks}</div>
-                                                <div class="text-sm text-gray-500 flex items-center gap-2 mt-1">
-                                                    <i data-lucide="calendar" class="w-4 h-4 text-blue-400"></i> 
-                                                    <span class="font-medium text-gray-700">${dayjs(b.startDate).format('DD/MM')}</span> ${b.startTime} 
-                                                    <i data-lucide="arrow-right" class="w-3 h-3 text-gray-300"></i> 
-                                                    <span class="font-medium text-gray-700">${dayjs(b.endDate).format('DD/MM')}</span> ${b.endTime}
-                                                </div>
-                                                ${b.carId ? `<div class="mt-3 inline-flex items-center gap-2 text-xs bg-gray-50 border px-3 py-1.5 rounded-lg text-gray-600"><i data-lucide="car" class="w-3 h-3"></i> ${b.carId.name} ${b.carId.plate ? `(${b.carId.plate})` : ''} ${b.driverId ? `<span class="text-gray-300">|</span> <i data-lucide="user" class="w-3 h-3"></i> ${b.driverId.name}` : ''}</div>` : ''}
-                                            </div>
-                                            <div class="flex flex-col gap-2 items-end pt-1">
-                                                ${b.status==='approved' ? `
-                                                    <!-- 🚀 MODIFIED: Start Job Button with Data Attributes -->
-                                                    <button onclick="startTrip('${b._id}')" 
-                                                        data-action="start-trip" 
-                                                        data-start="${b.startDate}T${b.startTime}"
-                                                        class="px-4 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-all bg-gray-300 text-gray-500 cursor-not-allowed" disabled>
-                                                        <span>⏳ คำนวณเวลา...</span>
-                                                    </button>
-                                                ` : ''}
-                                                
-                                                ${b.status==='active' ? `
-                                                    <div class="flex flex-col gap-1 w-full items-end">
-                                                        <button onclick="openExtendModal('${b._id}')" class="bg-yellow-500 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow hover:bg-yellow-600 flex items-center gap-1 transition transform hover:scale-105 w-fit">⏳ ขยายเวลา</button>
-                                                        <button onclick="endTrip('${b._id}', ${b.startOdometer})" class="bg-gray-800 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow hover:bg-black flex items-center gap-1 transition transform hover:scale-105 w-fit"><span>🏁 คืนรถ</span></button>
-                                                    </div>` : ''}
-                                                ${['pending','approved'].includes(b.status) ? `<button onclick="cancelBooking('${b._id}')" class="text-red-500 text-xs font-medium hover:text-red-700 hover:underline px-2 py-1"><span>ยกเลิก</span></button>` : ''}
-                                            </div>
-                                        </div>
-                                    </div>
-                                `).join('')}
-                               </div>`
-                        }
-                    </div>
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border"><div class="flex justify-between items-center mb-6"><h3 class="font-bold text-lg text-gray-800">ประวัติการจองของฉัน</h3><span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">${myBookings.length} รายการ</span></div>${myBookings.length===0 ? `<div class="text-center text-gray-400 py-12 border-2 border-dashed border-gray-100 rounded-xl bg-gray-50"><i data-lucide="calendar-off" class="w-10 h-10 mx-auto mb-2 opacity-30"></i>ยังไม่มีรายการจอง</div>` : `<div class="space-y-3">${myBookings.map(b => `<div class="border border-gray-100 p-5 rounded-2xl bg-white hover:shadow-md transition group relative overflow-hidden"><div class="flex justify-between items-start relative z-10"><div><div class="flex items-center gap-2 mb-2"><span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide border status-${b.status} bg-opacity-10 text-opacity-80 border-opacity-20" style="color:var(--status-color); border-color:var(--status-color);">${b.status}</span><span class="text-xs text-gray-400 font-mono">${dayjs(b.createdAt).format('DD/MM/YY')}</span></div><div class="font-bold text-lg text-gray-800 group-hover:text-blue-600 transition">${b.remarks}</div><div class="text-sm text-gray-500 flex items-center gap-2 mt-1"><i data-lucide="calendar" class="w-4 h-4 text-blue-400"></i> <span class="font-medium text-gray-700">${dayjs(b.startDate).format('DD/MM')}</span> ${b.startTime} <i data-lucide="arrow-right" class="w-3 h-3 text-gray-300"></i> <span class="font-medium text-gray-700">${dayjs(b.endDate).format('DD/MM')}</span> ${b.endTime}</div>${b.carId ? `<div class="mt-3 inline-flex items-center gap-2 text-xs bg-gray-50 border px-3 py-1.5 rounded-lg text-gray-600"><i data-lucide="car" class="w-3 h-3"></i> ${b.carId.name} ${b.carId.plate ? `(${b.carId.plate})` : ''} ${b.driverId ? `<span class="text-gray-300">|</span> <i data-lucide="user" class="w-3 h-3"></i> ${b.driverId.name}` : ''}</div>` : ''}</div><div class="flex flex-col gap-2 items-end pt-1">${b.status==='approved' ? `<button onclick="startTrip('${b._id}')" data-action="start-trip" data-start="${b.startDate}T${b.startTime}" class="px-4 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-all bg-gray-300 text-gray-500 cursor-not-allowed" disabled><span>⏳ คำนวณเวลา...</span></button>` : ''}${b.status==='active' ? `<div class="flex flex-col gap-1 w-full items-end"><button onclick="openExtendModal('${b._id}')" class="bg-yellow-500 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow hover:bg-yellow-600 flex items-center gap-1 transition transform hover:scale-105 w-fit">⏳ ขยายเวลา</button><button onclick="endTrip('${b._id}', ${b.startOdometer})" class="bg-gray-800 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow hover:bg-black flex items-center gap-1 transition transform hover:scale-105 w-fit"><span>🏁 คืนรถ</span></button></div>` : ''}${['pending','approved'].includes(b.status) ? `<button onclick="cancelBooking('${b._id}')" class="text-red-500 text-xs font-medium hover:text-red-700 hover:underline px-2 py-1"><span>ยกเลิก</span></button>` : ''}</div></div></div>`).join('')}</div>`}</div>
                 </div>
             </div>`;
         }
 
-        // --- 🚗 HELPER FUNCTIONS FOR CAR/DRIVER COUNTS ---
-        async function checkAvail() { 
-            const sd=document.getElementById('sd').value, st=document.getElementById('st').value, ed=document.getElementById('ed').value, et=document.getElementById('et').value, badge=document.getElementById('avail-badge'); 
-            
-            if(sd&&st&&ed&&et){
-                const r=await api.action('post','check-availability',{startDate:sd,startTime:st,endDate:ed,endTime:et}); 
-                if(r.success){
-                    const availCars = r.data.availableCars.length;
-                    const availDrivers = r.data.availableDrivers.length;
-                    
-                    document.getElementById('cc').innerText=availCars;
-                    document.getElementById('dc').innerText=availDrivers;
-                    badge.classList.remove('hidden');
-                    
-                    // Update limits & global state
-                    availableResources = { cars: availCars, drivers: availDrivers };
-                    document.getElementById('maxCarsLabel').innerText = availCars;
-                    document.getElementById('maxDriversLabel').innerText = availDrivers;
-                    
-                    // Reset inputs if they exceed new limits
-                    const carInput = document.getElementById('carCount');
-                    const driverInput = document.getElementById('driverCount');
-                    
-                    if(parseInt(carInput.value) > availCars) carInput.value = Math.max(1, availCars);
-                    if(availCars === 0) carInput.value = 0; // handle 0 case
-                    
-                    // Driver logic: cannot exceed cars AND cannot exceed available drivers
-                    const maxDrivers = Math.min(parseInt(carInput.value), availDrivers);
-                    if(parseInt(driverInput.value) > maxDrivers) driverInput.value = maxDrivers;
-                }
-            } else {
-                badge.classList.add('hidden');
-                availableResources = { cars: 0, drivers: 0 };
-            } 
-        }
-
-        function adjustCarCount(n) {
-            const el = document.getElementById('carCount');
-            const driverEl = document.getElementById('driverCount');
-            if(!el) return;
-            
-            let val = parseInt(el.value) + n;
-            const max = availableResources.cars;
-            
-            if(val < 1) val = 1;
-            if(val > max) val = max;
-            if(max === 0) val = 0;
-            
-            el.value = val;
-            
-            // Adjust drivers if cars decrease below current drivers
-            // Logic: Drivers cannot exceed cars
-            let currentDrivers = parseInt(driverEl.value);
-            if(currentDrivers > val) {
-                driverEl.value = val;
-            }
-        }
-
-        function adjustDriverCount(n) {
-            const el = document.getElementById('driverCount');
-            const carEl = document.getElementById('carCount');
-            if(!el) return;
-            
-            let val = parseInt(el.value) + n;
-            const carsSelected = parseInt(carEl.value);
-            const driversAvailable = availableResources.drivers;
-            
-            // Constraint: Drivers <= Cars Selected AND Drivers <= Drivers Available
-            const max = Math.min(carsSelected, driversAvailable);
-            
-            if(val < 0) val = 0;
-            if(val > max) val = max;
-            
-            el.value = val;
-        }
-
-        // --- HELPER FUNCTIONS FOR SLIDER LOGIC ---
-        function resetToNow() {
-            const now = dayjs();
-            document.getElementById('sd').value = now.format('YYYY-MM-DD');
-            document.getElementById('st').value = now.format('HH:mm');
-            // Reset slider to 1 hour (60 mins)
-            document.getElementById('duration-slider').max = DEFAULT_SLIDER_MAX;
-            document.getElementById('duration-slider').value = 60;
-            updateSliderMarkers(DEFAULT_SLIDER_MAX);
-            updateEndTimeFromSlider(60);
-        }
-
-        function syncSliderTime() {
-            // When start time manually changes, recalc end time based on current slider value
-            const val = document.getElementById('duration-slider').value;
-            updateEndTimeFromSlider(val);
-        }
-
-        function updateSliderFromInputs() {
-            const sd = document.getElementById('sd').value;
-            const st = document.getElementById('st').value;
-            const ed = document.getElementById('ed').value;
-            const et = document.getElementById('et').value;
-
-            if (sd && st && ed && et) {
-                const start = dayjs(`${sd}T${st}`);
-                const end = dayjs(`${ed}T${et}`);
-                const diffMins = end.diff(start, 'minute');
-
-                const labelEl = document.getElementById('duration-label');
-                const slider = document.getElementById('duration-slider');
-
-                if (diffMins < 0) {
-                    // End time is before start time - visual error or ignore
-                    labelEl.innerText = "เวลาไม่ถูกต้อง";
-                    labelEl.classList.add('text-red-500');
-                } else {
-                    labelEl.classList.remove('text-red-500');
-                    
-                    // 🚀 DYNAMIC SCALE LOGIC:
-                    // If duration exceeds current slider max, expand the slider
-                    if (diffMins > slider.max) {
-                        // Expand to fit duration + 2 hours buffer
-                        const newMax = diffMins + 120; 
-                        slider.max = newMax;
-                        updateSliderMarkers(newMax);
-                    } else if (diffMins <= DEFAULT_SLIDER_MAX && slider.max > DEFAULT_SLIDER_MAX) {
-                        // If duration fits in default scale, reset scale
-                        slider.max = DEFAULT_SLIDER_MAX;
-                        updateSliderMarkers(DEFAULT_SLIDER_MAX);
-                    }
-
-                    slider.value = diffMins;
-                    updateDurationLabel(diffMins);
-                    checkAvail();
-                }
-            }
-        }
-
-        function updateEndTimeFromSlider(minutes) {
-            const sd = document.getElementById('sd').value;
-            const st = document.getElementById('st').value;
-            if(!sd || !st) return;
-
-            const start = dayjs(`${sd}T${st}`);
-            const end = start.add(parseInt(minutes), 'minute');
-            
-            // Update Visible Inputs
-            document.getElementById('ed').value = end.format('YYYY-MM-DD');
-            document.getElementById('et').value = end.format('HH:mm');
-
-            updateDurationLabel(minutes);
-            checkAvail(); 
-        }
-
-        function updateDurationLabel(minutes) {
-            const totalHours = Math.floor(minutes / 60);
-            const mins = minutes % 60;
-            let label = "";
-            if (totalHours >= 24) {
-                const days = Math.floor(totalHours / 24);
-                const remHours = totalHours % 24;
-                label = `${days} วัน ${remHours > 0 ? remHours + ' ชม.' : ''}`;
-                if(mins > 0) label += ` ${mins} นาที`;
-            } else {
-                label = `${totalHours > 0 ? totalHours + ' ชม. ' : ''}${mins} นาที`;
-            }
-            document.getElementById('duration-label').innerText = label;
-        }
-
-        function updateSliderMarkers(maxVal) {
-            const markers = document.getElementById('slider-markers');
-            if (maxVal <= 720) {
-                markers.innerHTML = `<span>30m</span><span>3h</span><span>6h</span><span>9h</span><span>12h</span>`;
-            } else {
-                // If scale is huge (e.g. days), show Day markers
-                const days = Math.ceil(maxVal / 1440);
-                let html = '<span>0</span>';
-                for(let i=1; i<=4; i++) {
-                    html += `<span>${Math.round((maxVal/4)*i/60)}h</span>`;
-                }
-                markers.innerHTML = html;
-            }
-        }
-
+        // --- RENDER HISTORY VIEW (SEPARATED) ---
         function renderHistoryView(c) {
              const isMaintenance = state.historyFilter === 'maintenance';
-
-            // Filter Logic
-            const filteredList = state.bookings.filter(b => {
-                // 1. Separation Logic: Force separate based on tab
-                if (isMaintenance) {
-                    if (b.status !== 'maintenance') return false;
-                } else {
-                    if (b.status === 'maintenance') return false;
-                }
-
-                // 2. Standard Filters
-                // Only use status filter for Normal Trips (Maintenance has only one status)
+             const filteredList = state.bookings.filter(b => {
+                if (isMaintenance) { if (b.status !== 'maintenance') return false; } else { if (b.status === 'maintenance') return false; }
                 const matchStatus = isMaintenance ? true : (state.filters.status === 'all' || b.status === state.filters.status);
-                
-                const matchSearch = state.filters.search === '' || 
-                    b.remarks?.toLowerCase().includes(state.filters.search.toLowerCase()) || 
-                    b.userId?.toLowerCase().includes(state.filters.search.toLowerCase()) ||
-                    (b.carId && b.carId.name?.toLowerCase().includes(state.filters.search.toLowerCase())) ||
-                    (b.driverId && b.driverId.name?.toLowerCase().includes(state.filters.search.toLowerCase()));
-                
+                const matchSearch = state.filters.search === '' || b.remarks?.toLowerCase().includes(state.filters.search.toLowerCase()) || b.userId?.toLowerCase().includes(state.filters.search.toLowerCase()) || (b.carId && b.carId.name?.toLowerCase().includes(state.filters.search.toLowerCase())) || (b.driverId && b.driverId.name?.toLowerCase().includes(state.filters.search.toLowerCase()));
                 const bookingDate = dayjs(b.startDate);
                 const matchStart = state.filters.startDate === '' || bookingDate.isAfter(dayjs(state.filters.startDate).subtract(1, 'day'));
                 const matchEnd = state.filters.endDate === '' || bookingDate.isBefore(dayjs(state.filters.endDate).add(1, 'day'));
-
                 return matchStatus && matchSearch && matchStart && matchEnd;
-            }).sort((a,b) => new Date(b.startDate) - new Date(a.startDate)); // Descending
+            }).sort((a,b) => new Date(b.startDate) - new Date(a.startDate));
 
-            // Summary Calculation
             const totalItems = filteredList.length;
             const totalFuel = !isMaintenance ? filteredList.reduce((sum, b) => sum + (b.fuelCost || 0), 0) : 0;
             const totalToll = !isMaintenance ? filteredList.reduce((sum, b) => sum + (b.tollCost || 0), 0) : 0;
-            
-            // Maintenance Summary
             const distinctCars = isMaintenance ? new Set(filteredList.filter(b=>b.carId).map(b=>b.carId._id)).size : 0;
             const distinctDrivers = isMaintenance ? new Set(filteredList.filter(b=>b.driverId).map(b=>b.driverId._id)).size : 0;
 
             c.innerHTML = `
             <div class="space-y-6">
-                <!-- 1. Tabs & Filters -->
                 <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
                     <div class="flex flex-col md:flex-row justify-between items-end md:items-center mb-4 gap-4">
-                        <div class="flex flex-col gap-2">
-                            <h2 class="text-xl font-bold text-gray-800 flex items-center gap-2">
-                                <div class="bg-indigo-100 p-2 rounded-lg text-indigo-600"><i data-lucide="filter"></i></div>
-                                ประวัติ & รายงาน
-                            </h2>
-                            <!-- TABS -->
-                            <div class="flex gap-1 bg-gray-100 p-1 rounded-lg w-fit">
-                                <button onclick="state.historyFilter='trips';renderApp()" class="${!isMaintenance ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:bg-gray-200'} px-4 py-1.5 rounded-md text-sm font-bold transition flex items-center gap-2"><i data-lucide="car"></i> งานเดินรถ</button>
-                                <button onclick="state.historyFilter='maintenance';renderApp()" class="${isMaintenance ? 'bg-orange-100 text-orange-600 shadow-sm' : 'text-gray-500 hover:bg-gray-200'} px-4 py-1.5 rounded-md text-sm font-bold transition flex items-center gap-2"><i data-lucide="wrench"></i> แจ้งซ่อม/หยุด</button>
-                            </div>
-                        </div>
-                        <div class="flex gap-2">
-                             <button onclick="resetFilters()" class="text-sm text-gray-500 hover:text-gray-700 underline">ล้างค่า</button>
-                             <button onclick="exportCSV()" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow hover:bg-green-700 transition flex items-center gap-2"><i data-lucide="download"></i> Export</button>
-                        </div>
+                        <div class="flex flex-col gap-2"><h2 class="text-xl font-bold text-gray-800 flex items-center gap-2"><div class="bg-indigo-100 p-2 rounded-lg text-indigo-600"><i data-lucide="filter"></i></div> ประวัติ & รายงาน</h2><div class="flex gap-1 bg-gray-100 p-1 rounded-lg w-fit"><button onclick="state.historyFilter='trips';renderApp()" class="${!isMaintenance ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:bg-gray-200'} px-4 py-1.5 rounded-md text-sm font-bold transition flex items-center gap-2"><i data-lucide="car"></i> งานเดินรถ</button><button onclick="state.historyFilter='maintenance';renderApp()" class="${isMaintenance ? 'bg-orange-100 text-orange-600 shadow-sm' : 'text-gray-500 hover:bg-gray-200'} px-4 py-1.5 rounded-md text-sm font-bold transition flex items-center gap-2"><i data-lucide="wrench"></i> แจ้งซ่อม/หยุด</button></div></div>
+                        <div class="flex gap-2"><button onclick="resetFilters()" class="text-sm text-gray-500 hover:text-gray-700 underline">ล้างค่า</button><button onclick="exportCSV()" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow hover:bg-green-700 transition flex items-center gap-2"><i data-lucide="download"></i> Export</button></div>
                     </div>
-                    
                     <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
-                        <div class="relative md:col-span-${isMaintenance ? '2' : '1'}">
-                            <i data-lucide="search" class="absolute left-3 top-2.5 w-4 h-4 text-gray-400"></i>
-                            <input type="text" value="${state.filters.search}" oninput="updateFilter('search', this.value)" 
-                                placeholder="ค้นหา (ชื่อ, รถ, รายละเอียด)..." 
-                                class="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition">
-                        </div>
-                        
-                        ${!isMaintenance ? `
-                        <select onchange="updateFilter('status', this.value)" class="border border-gray-200 p-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer">
-                            <option value="all" ${state.filters.status==='all'?'selected':''}>สถานะ: ทั้งหมด</option>
-                            <option value="pending" ${state.filters.status==='pending'?'selected':''}>🟡 รออนุมัติ</option>
-                            <option value="approved" ${state.filters.status==='approved'?'selected':''}>🔵 อนุมัติแล้ว</option>
-                            <option value="active" ${state.filters.status==='active'?'selected':''}>🟢 กำลังดำเนินการ</option>
-                            <option value="completed" ${state.filters.status==='completed'?'selected':''}>🏁 จบงานแล้ว</option>
-                            <option value="cancelled" ${state.filters.status==='cancelled'?'selected':''}>❌ ยกเลิก</option>
-                        </select>` : ''}
-                        
-                        <input type="date" value="${state.filters.startDate}" onchange="updateFilter('startDate', this.value)" class="border border-gray-200 p-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 text-gray-600">
-                        <input type="date" value="${state.filters.endDate}" onchange="updateFilter('endDate', this.value)" class="border border-gray-200 p-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 text-gray-600">
+                        <div class="relative md:col-span-${isMaintenance ? '2' : '1'}"><i data-lucide="search" class="absolute left-3 top-2.5 w-4 h-4 text-gray-400"></i><input type="text" value="${state.filters.search}" oninput="updateFilter('search', this.value)" placeholder="ค้นหา (ชื่อ, รถ, รายละเอียด)..." class="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition"></div>
+                        ${!isMaintenance ? `<select onchange="updateFilter('status', this.value)" class="border border-gray-200 p-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"><option value="all" ${state.filters.status==='all'?'selected':''}>สถานะ: ทั้งหมด</option><option value="pending" ${state.filters.status==='pending'?'selected':''}>🟡 รออนุมัติ</option><option value="approved" ${state.filters.status==='approved'?'selected':''}>🔵 อนุมัติแล้ว</option><option value="active" ${state.filters.status==='active'?'selected':''}>🟢 กำลังดำเนินการ</option><option value="completed" ${state.filters.status==='completed'?'selected':''}>🏁 จบงานแล้ว</option><option value="cancelled" ${state.filters.status==='cancelled'?'selected':''}>❌ ยกเลิก</option></select>` : ''}
+                        <input type="date" value="${state.filters.startDate}" onchange="updateFilter('startDate', this.value)" class="border border-gray-200 p-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 text-gray-600"><input type="date" value="${state.filters.endDate}" onchange="updateFilter('endDate', this.value)" class="border border-gray-200 p-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 text-gray-600">
                     </div>
                 </div>
 
-                <!-- 2. Summary Dashboard -->
-                ${!isMaintenance ? `
-                <div class="grid grid-cols-3 gap-4">
-                    <div class="bg-indigo-50 p-4 rounded-xl border border-indigo-100">
-                        <div class="text-xs text-indigo-500 font-bold uppercase">จำนวนรายการ</div>
-                        <div class="text-2xl font-black text-indigo-700 mt-1">${totalItems}</div>
-                    </div>
-                    <div class="bg-orange-50 p-4 rounded-xl border border-orange-100">
-                        <div class="text-xs text-orange-500 font-bold uppercase">ค่าน้ำมันรวม</div>
-                        <div class="text-2xl font-black text-orange-700 mt-1">${totalFuel.toLocaleString()} <span class="text-xs">฿</span></div>
-                    </div>
-                    <div class="bg-teal-50 p-4 rounded-xl border border-teal-100">
-                        <div class="text-xs text-teal-500 font-bold uppercase">ค่าทางด่วนรวม</div>
-                        <div class="text-2xl font-black text-teal-700 mt-1">${totalToll.toLocaleString()} <span class="text-xs">฿</span></div>
-                    </div>
-                </div>` : `
-                <div class="grid grid-cols-3 gap-4">
-                     <div class="bg-orange-50 p-4 rounded-xl border border-orange-100">
-                        <div class="text-xs text-orange-600 font-bold uppercase">รายการซ่อม/หยุด</div>
-                        <div class="text-2xl font-black text-orange-800 mt-1">${totalItems}</div>
-                    </div>
-                    <div class="bg-white p-4 rounded-xl border border-gray-200">
-                        <div class="text-xs text-gray-500 font-bold uppercase">รถที่หยุด</div>
-                        <div class="text-2xl font-black text-gray-700 mt-1">${distinctCars} <span class="text-xs font-normal">คัน</span></div>
-                    </div>
-                    <div class="bg-white p-4 rounded-xl border border-gray-200">
-                        <div class="text-xs text-gray-500 font-bold uppercase">คนขับที่ลา</div>
-                        <div class="text-2xl font-black text-gray-700 mt-1">${distinctDrivers} <span class="text-xs font-normal">คน</span></div>
-                    </div>
-                </div>
-                `}
+                ${!isMaintenance ? `<div class="grid grid-cols-3 gap-4"><div class="bg-indigo-50 p-4 rounded-xl border border-indigo-100"><div class="text-xs text-indigo-500 font-bold uppercase">จำนวนรายการ</div><div class="text-2xl font-black text-indigo-700 mt-1">${totalItems}</div></div><div class="bg-orange-50 p-4 rounded-xl border border-orange-100"><div class="text-xs text-orange-500 font-bold uppercase">ค่าน้ำมันรวม</div><div class="text-2xl font-black text-orange-700 mt-1">${totalFuel.toLocaleString()} <span class="text-xs">฿</span></div></div><div class="bg-teal-50 p-4 rounded-xl border border-teal-100"><div class="text-xs text-teal-500 font-bold uppercase">ค่าทางด่วนรวม</div><div class="text-2xl font-black text-teal-700 mt-1">${totalToll.toLocaleString()} <span class="text-xs">฿</span></div></div></div>` : `<div class="grid grid-cols-3 gap-4"><div class="bg-orange-50 p-4 rounded-xl border border-orange-100"><div class="text-xs text-orange-600 font-bold uppercase">รายการซ่อม/หยุด</div><div class="text-2xl font-black text-orange-800 mt-1">${totalItems}</div></div><div class="bg-white p-4 rounded-xl border border-gray-200"><div class="text-xs text-gray-500 font-bold uppercase">รถที่หยุด</div><div class="text-2xl font-black text-gray-700 mt-1">${distinctCars} <span class="text-xs font-normal">คัน</span></div></div><div class="bg-white p-4 rounded-xl border border-gray-200"><div class="text-xs text-gray-500 font-bold uppercase">คนขับที่ลา</div><div class="text-2xl font-black text-gray-700 mt-1">${distinctDrivers} <span class="text-xs font-normal">คน</span></div></div></div>`}
 
-                <!-- 3. Data Grid Table -->
                 <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
                     <div class="overflow-x-auto">
                         <table class="w-full text-sm text-left">
-                            <thead class="bg-gray-50 text-gray-500 font-bold text-xs uppercase border-b border-gray-100">
-                                <tr>
-                                    <th class="p-4 whitespace-nowrap">วันที่ / เวลา</th>
-                                    <th class="p-4">รายละเอียด</th>
-                                    <th class="p-4">รถ / คนขับ</th>
-                                    <th class="p-4 text-right">${isMaintenance ? 'หมายเหตุเพิ่มเติม' : 'ระยะทาง / ค่าใช้จ่าย'}</th>
-                                    <th class="p-4 text-center">สถานะ</th>
-                                    <th class="p-4 text-right">จัดการ</th>
-                                </tr>
-                            </thead>
+                            <thead class="bg-gray-50 text-gray-500 font-bold text-xs uppercase border-b border-gray-100"><tr><th class="p-4 whitespace-nowrap">วันที่ / เวลา</th><th class="p-4">รายละเอียด</th><th class="p-4">รถ / คนขับ</th><th class="p-4 text-right">${isMaintenance ? 'หมายเหตุเพิ่มเติม' : 'ระยะทาง / ค่าใช้จ่าย'}</th><th class="p-4 text-center">สถานะ</th><th class="p-4 text-right">จัดการ</th></tr></thead>
                             <tbody class="divide-y divide-gray-100">
                                 ${filteredList.length === 0 ? `<tr><td colspan="6" class="p-12 text-center text-gray-400 flex-col items-center justify-center"><i data-lucide="search-x" class="w-10 h-10 mx-auto mb-2 opacity-50"></i>ไม่พบข้อมูลที่ค้นหา</td></tr>` : 
                                 filteredList.map(b => {
@@ -1146,44 +538,7 @@
                                     const dist = (b.endOdometer && b.startOdometer) ? (b.endOdometer - b.startOdometer).toLocaleString() : '-';
                                     const isAdmin = state.currentUser.role === 'admin';
                                     const canRecover = isAdmin && b.status === 'cancelled';
-                                    
-                                    return `
-                                    <tr class="hover:bg-gray-50 transition group">
-                                        <td class="p-4 align-top whitespace-nowrap">
-                                            <div class="font-bold text-gray-800">${dayjs(b.startDate).format('DD MMM YY')}</div>
-                                            <div class="text-xs text-gray-500 font-mono mt-1">${isMaintenance ? 'ตลอดวัน' : `${b.startTime} - ${b.endTime}`}</div>
-                                        </td>
-                                        <td class="p-4 align-top">
-                                            <div class="font-medium text-gray-900 line-clamp-2" title="${b.remarks}">${b.remarks.replace('[ปิด]', '')}</div>
-                                            <div class="text-xs text-gray-500 mt-1 flex items-center gap-1"><i data-lucide="user" class="w-3 h-3"></i> ${u.firstName}</div>
-                                        </td>
-                                        <td class="p-4 align-top">
-                                            ${isMaintenance ? (b.carId ? `<span class="text-xs font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded w-fit">🚘 ${b.carId.name}</span>` : `<span class="text-xs font-medium text-green-700 bg-green-50 px-2 py-0.5 rounded w-fit">👨‍✈️ ${b.driverId.name}</span>`) : `
-                                                <div class="flex flex-col gap-1">
-                                                    <span class="text-xs font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded w-fit">🚘 ${b.carId?.name||'-'} ${b.carId?.plate ? `(${b.carId.plate})` : ''}</span>
-                                                    <span class="text-xs font-medium text-green-700 bg-green-50 px-2 py-0.5 rounded w-fit">👨‍✈️ ${b.driverId?.name||'-'}</span>
-                                                </div>
-                                            `}
-                                        </td>
-                                        <td class="p-4 align-top text-right">
-                                            ${isMaintenance ? `<span class="text-gray-400 italic text-xs">${b.remarks}</span>` : `
-                                                <div class="text-xs text-gray-600">${dist !== '-' ? `<span class="font-bold text-blue-600">+${dist} km</span>` : '-'}</div>
-                                                ${(b.fuelCost || b.tollCost) ? `<div class="text-[10px] text-gray-400 mt-1">฿${(b.fuelCost+b.tollCost).toLocaleString()}</div>` : ''}
-                                            `}
-                                        </td>
-                                        <td class="p-4 align-top text-center">
-                                            <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase status-${b.status} text-white shadow-sm border border-white border-opacity-20">${b.status}</span>
-                                        </td>
-                                        <td class="p-4 align-top text-right">
-                                            <div class="flex justify-end gap-1">
-                                                ${!isMaintenance && isAdmin ? `<button onclick="openEditBookingModal('${b._id}')" class="text-blue-500 bg-white border border-blue-100 p-1.5 rounded hover:bg-blue-50 transition" title="แก้ไข"><i data-lucide="edit-3" class="w-4 h-4"></i></button>` : ''}
-                                                ${canRecover ? `<button onclick="recoverBooking('${b._id}')" class="text-green-500 bg-white border border-green-100 p-1.5 rounded hover:bg-green-50 transition" title="กู้คืน"><i data-lucide="rotate-ccw" class="w-4 h-4"></i></button>` : ''}
-                                                ${(!isMaintenance && isAdmin && b.status === 'active') ? `<button onclick="endTrip('${b._id}', ${b.startOdometer||0})" class="text-purple-500 bg-white border border-purple-100 p-1.5 rounded hover:bg-purple-50 transition" title="จบงาน"><i data-lucide="check-circle" class="w-4 h-4"></i></button>` : ''}
-                                                ${isMaintenance && isAdmin ? `<button onclick="cancelBooking('${b._id}')" class="text-red-500 bg-white border border-red-100 p-1.5 rounded hover:bg-red-50 transition" title="ลบรายการ"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : ''}
-                                                ${(!isMaintenance && (state.bookings.find(booking => booking._id === b._id).status === 'active' || ['pending', 'approved'].includes(b.status))) ? `<button onclick="cancelBooking('${b._id}')" class="text-red-500 bg-white border border-red-100 p-1.5 rounded hover:bg-red-50 transition" title="ยกเลิก"><i data-lucide="x-circle" class="w-4 h-4"></i></button>` : ''}
-                                            </div>
-                                        </td>
-                                    </tr>`;
+                                    return `<tr class="hover:bg-gray-50 transition group"><td class="p-4 align-top whitespace-nowrap"><div class="font-bold text-gray-800">${dayjs(b.startDate).format('DD MMM YY')}</div><div class="text-xs text-gray-500 font-mono mt-1">${isMaintenance ? 'ตลอดวัน' : `${b.startTime} - ${b.endTime}`}</div></td><td class="p-4 align-top"><div class="font-medium text-gray-900 line-clamp-2" title="${b.remarks}">${b.remarks.replace('[ปิด]', '')}</div><div class="text-xs text-gray-500 mt-1 flex items-center gap-1"><i data-lucide="user" class="w-3 h-3"></i> ${u.firstName}</div></td><td class="p-4 align-top">${isMaintenance ? (b.carId ? `<span class="text-xs font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded w-fit">🚘 ${b.carId.name}</span>` : `<span class="text-xs font-medium text-green-700 bg-green-50 px-2 py-0.5 rounded w-fit">👨‍✈️ ${b.driverId.name}</span>`) : `<div class="flex flex-col gap-1"><span class="text-xs font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded w-fit">🚘 ${b.carId?.name||'-'} ${b.carId?.plate ? `(${b.carId.plate})` : ''}</span><span class="text-xs font-medium text-green-700 bg-green-50 px-2 py-0.5 rounded w-fit">👨‍✈️ ${b.driverId?.name||'-'}</span></div>`}</td><td class="p-4 align-top text-right">${isMaintenance ? `<span class="text-gray-400 italic text-xs">${b.remarks}</span>` : `<div class="text-xs text-gray-600">${dist !== '-' ? `<span class="font-bold text-blue-600">+${dist} km</span>` : '-'}</div>${(b.fuelCost || b.tollCost) ? `<div class="text-[10px] text-gray-400 mt-1">฿${(b.fuelCost+b.tollCost).toLocaleString()}</div>` : ''}`}</td><td class="p-4 align-top text-center"><span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase status-${b.status} text-white shadow-sm border border-white border-opacity-20">${b.status}</span></td><td class="p-4 align-top text-right"><div class="flex justify-end gap-1">${!isMaintenance && isAdmin ? `<button onclick="openEditBookingModal('${b._id}')" class="text-blue-500 bg-white border border-blue-100 p-1.5 rounded hover:bg-blue-50 transition" title="แก้ไข"><i data-lucide="edit-3" class="w-4 h-4"></i></button>` : ''}${canRecover ? `<button onclick="recoverBooking('${b._id}')" class="text-green-500 bg-white border border-green-100 p-1.5 rounded hover:bg-green-50 transition" title="กู้คืน"><i data-lucide="rotate-ccw" class="w-4 h-4"></i></button>` : ''}${(!isMaintenance && isAdmin && b.status === 'active') ? `<button onclick="endTrip('${b._id}', ${b.startOdometer||0})" class="text-purple-500 bg-white border border-purple-100 p-1.5 rounded hover:bg-purple-50 transition" title="จบงาน"><i data-lucide="check-circle" class="w-4 h-4"></i></button>` : ''}${isMaintenance && isAdmin ? `<button onclick="cancelBooking('${b._id}')" class="text-red-500 bg-white border border-red-100 p-1.5 rounded hover:bg-red-50 transition" title="ลบรายการ"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : ''}${(!isMaintenance && (state.bookings.find(booking => booking._id === b._id).status === 'active' || ['pending', 'approved'].includes(b.status))) ? `<button onclick="cancelBooking('${b._id}')" class="text-red-500 bg-white border border-red-100 p-1.5 rounded hover:bg-red-50 transition" title="ยกเลิก"><i data-lucide="x-circle" class="w-4 h-4"></i></button>` : ''}</div></td></tr>`;
                                 }).join('')}
                             </tbody>
                         </table>
@@ -1191,17 +546,8 @@
                 </div>
             </div>`;
         }
-        
-        // 🔄 FILTER UTILS
-        function updateFilter(key, value) {
-            state.filters[key] = value;
-            renderApp();
-        }
-        function resetFilters() {
-            state.filters = { search: '', status: 'all', startDate: '', endDate: '' };
-            renderApp();
-        }
 
+        // --- CALENDAR & MODALS ---
         function renderCalendar(c) {
             const now = dayjs(state.currentDate);
             const monthStart = now.startOf('month');
@@ -1224,19 +570,14 @@
                         <div class="flex-1 overflow-hidden space-y-1 px-1">
                             ${events.map(b => {
                                 if (b.status === 'maintenance') {
-                                    // 🔧 Distinct View for Maintenance/Day Off
                                     const isCar = !!b.carId;
-                                    // Handle populated object or ID string safely
                                     const carName = (b.carId && typeof b.carId === 'object') ? b.carId.name : (state.cars.find(c=>c._id===b.carId)?.name || 'Unknown Car');
                                     const driverName = (b.driverId && typeof b.driverId === 'object') ? b.driverId.name : (state.drivers.find(d=>d._id===b.driverId)?.name || 'Unknown Driver');
-                                    
                                     const text = isCar ? `🔧 ${carName}` : `⛔ ${driverName}`;
                                     const remark = b.remarks.replace('[ปิด]', '').trim();
                                     const tooltip = `${isCar ? 'แจ้งซ่อม/หยุดรถ' : 'คนขับหยุดงาน'}: ${remark || '-'}`;
-                                    
                                     return `<div onclick="showBookingDetails('${b._id}')" class="event-maintenance" title="${tooltip}">${text}</div>`;
                                 } else {
-                                    // 🚗 Standard Trip View
                                     let display = `${b.startTime} ${b.remarks}`;
                                     return `<div onclick="showBookingDetails('${b._id}')" class="event-pill status-${b.status} shadow-sm" title="${display}">${display}</div>`;
                                 }
@@ -1270,12 +611,7 @@
         }
         
         function renderUserManagement(c) {
-            // SAFE GUARD: Check if users array exists
-            if (!Array.isArray(state.users)) {
-                c.innerHTML = '<div class="p-8 text-center text-gray-500">กำลังโหลดข้อมูล...</div>';
-                return;
-            }
-
+            if (!Array.isArray(state.users)) { c.innerHTML = '<div class="p-8 text-center text-gray-500">กำลังโหลดข้อมูล...</div>'; return; }
              c.innerHTML = `
             <div class="bg-white p-6 rounded-xl shadow-sm border">
                 <h3 class="font-bold mb-4 text-lg flex items-center gap-2"><i data-lucide="users" class="text-purple-600"></i> จัดการผู้ใช้งาน</h3>
@@ -1293,11 +629,9 @@
                         <thead class="bg-gray-50 text-gray-500 font-bold text-xs uppercase"><tr><th class="p-4">User</th><th class="p-4">Name</th><th class="p-4">Role</th><th class="p-4">Status</th><th class="p-4 text-right">Actions</th></tr></thead>
                         <tbody>
                             ${state.users.map(u => {
-                                // SAFE GUARD: Handle potentially missing fields to prevent crash
                                 const role = u.role ? u.role : 'user';
                                 const roleDisplay = role.toUpperCase();
-                                const isActive = u.isActive !== false; // Default true
-                                
+                                const isActive = u.isActive !== false;
                                 return `
                                 <tr class="hover:bg-gray-50 transition ${!isActive?'bg-gray-100 opacity-60':''}">
                                     <td class="p-4 font-bold text-gray-700">${u.username || '-'}</td>
@@ -1305,9 +639,7 @@
                                     <td class="p-4"><span class="px-2 py-1 rounded-md text-xs font-bold border ${role==='admin'?'bg-purple-100 text-purple-700 border-purple-200':'bg-gray-100 text-gray-600 border-gray-200'}">${roleDisplay}</span></td>
                                     <td class="p-4">${u.lineUserId ? '<span class="text-green-600 flex gap-1 items-center font-bold text-xs"><i data-lucide="check-circle" class="w-3 h-3"></i> Linked</span>' : '<span class="text-gray-400 text-xs flex gap-1 items-center"><i data-lucide="circle" class="w-3 h-3"></i> Unlinked</span>'}</td>
                                     <td class="p-4 text-right flex justify-end gap-1">
-                                        <button onclick="toggleUserRole('${u._id}', '${role}')" class="bg-white border border-gray-200 text-purple-500 p-2 rounded-lg hover:bg-purple-50 hover:border-purple-300 transition" title="เปลี่ยน Role">
-                                            <i data-lucide="${role==='admin'?'shield-off':'shield'}" class="w-4 h-4"></i>
-                                        </button>
+                                        <button onclick="toggleUserRole('${u._id}', '${role}')" class="bg-white border border-gray-200 text-purple-500 p-2 rounded-lg hover:bg-purple-50 hover:border-purple-300 transition" title="เปลี่ยน Role"><i data-lucide="${role==='admin'?'shield-off':'shield'}" class="w-4 h-4"></i></button>
                                         <button onclick="openEditUserModal('${u._id}')" class="bg-white border border-gray-200 text-gray-500 p-2 rounded-lg hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition" title="แก้ไข"><i data-lucide="edit" class="w-4 h-4"></i></button>
                                         <button onclick="openResetPwdModal('${u._id}','${u.username}')" class="bg-white border border-gray-200 text-gray-500 p-2 rounded-lg hover:bg-yellow-50 hover:text-yellow-600 hover:border-yellow-200 transition" title="รีเซ็ตพาส"><i data-lucide="key" class="w-4 h-4"></i></button>
                                         <button onclick="toggleUser('${u._id}', ${isActive})" class="border p-1.5 rounded text-xs w-8 ${isActive?'text-green-600 border-green-200 bg-green-50':'text-gray-400 border-gray-300 hover:bg-gray-100'}" title="สถานะ">${isActive?'ON':'OFF'}</button>
@@ -1321,42 +653,31 @@
             </div>`;
         }
 
-        // --- ACTIONS WITH LOADING ---
-        async function submitBooking(e){ e.preventDefault(); const btn=e.target.querySelector('button'); setLoading(btn, true); const d=Object.fromEntries(new FormData(e.target)); const r=await api.action('post','bookings',d); if(r.success){Swal.fire('Success','จองสำเร็จ รออนุมัติ','success'); api.fetchData(); e.target.reset(); document.getElementById('avail-badge').classList.add('hidden');} else{Swal.fire('Error',r.message,'error');} setLoading(btn, false); }
-        async function toggleUserRole(id, currentRole) { if (id === state.currentUser._id) return Swal.fire('Error', 'คุณไม่สามารถเปลี่ยนสิทธิ์ตัวเองได้', 'error'); const newRole = currentRole === 'admin' ? 'user' : 'admin'; const action = newRole === 'admin' ? 'Promote เป็น Admin' : 'Demote เป็น User'; if((await Swal.fire({title:`ยืนยัน ${action}?`, icon:'warning', showCancelButton:true})).isConfirmed){ await api.action('put', `users/${id}`, { role: newRole }); api.fetchData(); Swal.fire('Success', 'อัปเดตสิทธิ์เรียบร้อย', 'success'); } }
-        async function approveBooking(id){ const booking = state.bookings.find(x => x._id === id); const carId = document.getElementById(`c-${id}`).value; const driverId = document.getElementById(`d-${id}`).value; if(!carId) return Swal.fire('Warning', 'กรุณาเลือกรถ', 'warning'); if (booking.useDriver && !driverId) { return Swal.fire('Warning', 'งานนี้ผู้จองต้องการคนขับ กรุณาเลือกคนขับ', 'warning'); } const driverIdToSend = driverId === "" ? null : driverId; const res = await api.action('put', `bookings/${id}`, { status:'approved', carId, driverId: driverIdToSend }); if(res.success) { Swal.fire('Success', 'อนุมัติเรียบร้อย', 'success'); api.fetchData(); } else { Swal.fire('Error', res.message, 'error'); } }
-        async function rejectBooking(id) { const { value: reason } = await Swal.fire({ title: 'ระบุเหตุผล', input: 'text', showCancelButton: true }); if (reason) { await api.action('put', `bookings/${id}`, { status: 'rejected', rejectionReason: reason }); api.fetchData(); } }
-        async function cancelBooking(id) { 
-            const booking = state.bookings.find(b => b._id === id);
-            const isActiveCancel = booking.status === 'active';
-            const result = await Swal.fire({
-                title: isActiveCancel ? '⚠️ ยกเลิกงานที่เริ่มแล้ว?' : 'ยืนยันยกเลิก?',
-                text: isActiveCancel ? "งานนี้เริ่มอัตโนมัติไปแล้ว คุณต้องการยกเลิกใช่หรือไม่?" : "",
-                icon: isActiveCancel ? 'warning' : 'question',
-                showCancelButton: true,
-                confirmButtonColor: '#ef4444',
-                confirmButtonText: 'ใช่, ยกเลิกเดี๋ยวนี้'
-            });
-            if(result.isConfirmed){ 
-                await api.action('put', `bookings/${id}`, { 
-                    status: 'cancelled', 
-                    rejectionReason: isActiveCancel ? 'Admin Forced Cancel (Was Active)' : 'User Cancelled', 
-                    cancelledBy: state.currentUser.username 
-                }); 
-                api.fetchData(); 
-            } 
+        // --- NEW: Force Summary Function ---
+        async function forceSummary(btn) {
+            setLoading(btn, true);
+            const res = await api.action('get', 'force-summary');
+            if (res.success) { Swal.fire('สำเร็จ', res.data.message, 'success'); } 
+            else { Swal.fire('ผิดพลาด', res.message, 'error'); }
+            setLoading(btn, false);
         }
-        async function startTrip(id){ const b = state.bookings.find(x => x._id === id); const startDateTime = dayjs(`${b.startDate}T${b.startTime}`); const now = dayjs(); const unlockTime = startDateTime.subtract(TRAVEL_BUFFER_MINUTES, 'minute'); if (now.isBefore(unlockTime)) { return Swal.fire({ icon: 'warning', title: 'ยังไม่ถึงเวลาเริ่มงาน', text: `ระบบอนุญาตให้กดเริ่มได้ล่วงหน้า ${TRAVEL_BUFFER_MINUTES} นาทีเท่านั้น (${unlockTime.format('HH:mm')})` }); } let co=0; if(b.carId){ const r=await axios.get(`${API_URL}/cars`); const c=r.data.find(x=>x._id===(b.carId._id||b.carId)); if(c) co=c.currentOdometer||0; } const {value:v}=await Swal.fire({ title:'เริ่มเดินทาง', html:`<div class="mb-2">ไมล์ปัจจุบัน: <b>${co}</b></div><input id="sw1" type="number" class="swal2-input" value="${co}">`, preConfirm:()=>{ const v=document.getElementById('sw1').value; if(v<co) Swal.showValidationMessage('ห้ามต่ำกว่าเดิม'); return v; } }); if(v){ await api.action('put',`bookings/${id}`,{status:'active',startOdometer:v}); api.fetchData(); } }
-        async function endTrip(id,so){ const startOdo = Number(so) || 0; const {value:f}=await Swal.fire({ title:'คืนรถ', html:`<div class="text-left mb-2 text-sm text-gray-600">ไมล์เริ่มต้น: <b>${startOdo}</b></div><input id="eo" type="number" placeholder="เลขไมล์จบ (ต้องมากกว่า ${startOdo})" class="swal2-input"><input id="ef" type="number" placeholder="ค่าน้ำมัน (ถ้ามี)" class="swal2-input"><input id="et" type="number" placeholder="ค่าทางด่วน (ถ้ามี)" class="swal2-input">`, preConfirm:()=>{ const eo = document.getElementById('eo').value; const ef = document.getElementById('ef').value; const et = document.getElementById('et').value; if (!eo) return Swal.showValidationMessage('กรุณาระบุเลขไมล์จบ'); if (Number(eo) <= startOdo) return Swal.showValidationMessage('เลขไมล์จบต้องมากกว่าเลขไมล์เริ่มต้น'); return { endOdometer: Number(eo), fuelCost: Number(ef) || 0, tollCost: Number(et) || 0 }; } }); if(f){ try { await api.action('put',`bookings/${id}`,{status:'completed',...f}); Swal.fire('Success', 'บันทึกการคืนรถเรียบร้อย', 'success'); api.fetchData(); } catch(e) { Swal.fire('Error', e.message || 'เกิดข้อผิดพลาด', 'error'); } } }
-        async function recoverBooking(id) { const { value: mode } = await Swal.fire({ title: 'กู้คืนงานนี้?', text: "งานที่ถูกยกเลิกจะกลับมาใช้งานได้อีกครั้ง", icon: 'question', showCancelButton: true, confirmButtonColor: '#10b981', cancelButtonColor: '#6b7280', confirmButtonText: 'ใช่, กู้คืน', cancelButtonText: 'ยกเลิก', input: 'radio', inputOptions: { 'approved': 'คืนสถานะ: อนุมัติแล้ว (Approved)', 'active': 'คืนสถานะ: กำลังใช้งาน (Active - เริ่มวิ่งทันที)' }, inputValue: 'approved', inputValidator: (value) => { if (!value) { return 'กรุณาเลือกสถานะที่ต้องการกู้คืน' } } }); if (mode) { let startOdo = 0; if (mode === 'active') { const b = state.bookings.find(x => x._id === id); let currentCarOdo = 0; if(b.carId){ const r = await axios.get(`${API_URL}/cars`); const c = r.data.find(x => x._id === (b.carId._id || b.carId)); if(c) currentCarOdo = c.currentOdometer || 0; } const { value: odo } = await Swal.fire({ title: 'ระบุเลขไมล์เริ่มต้น', input: 'number', inputValue: currentCarOdo, showCancelButton: true }); if (!odo) return; startOdo = odo; } try { const payload = { status: mode, cancelledBy: null, rejectionReason: null }; if (mode === 'active') { payload.startOdometer = startOdo; } await api.action('put', `bookings/${id}`, payload); Swal.fire('Success', 'กู้คืนงานเรียบร้อยแล้ว', 'success'); api.fetchData(); } catch (e) { Swal.fire('Error', e.message || 'ไม่สามารถกู้คืนได้ (เวลาอาจชนกับงานอื่น)', 'error'); } } }
-        async function addResource(e,t){ e.preventDefault(); const btn=e.target.querySelector('button'); setLoading(btn, true); await api.action('post',t,Object.fromEntries(new FormData(e.target))); api.fetchData(); e.target.reset(); setLoading(btn, false); }
+
+        // --- HELPERS ---
+        function toggleStats() { state.showStats = !state.showStats; renderApp(); setTimeout(renderCharts, 100); }
+        function showDashboardDetail(type) { state.dashboardDetailType = type; renderApp(); }
+        function closeDashboardDetail() { state.dashboardDetailType = null; renderApp(); }
+        function updateFilter(key, value) { state.filters[key] = value; renderApp(); }
+        function resetFilters() { state.filters = { search: '', status: 'all', startDate: '', endDate: '' }; renderApp(); }
+
+        // --- MODALS & ACTIONS ---
+        async function addResource(e,t){ e.preventDefault(); await api.action('post',t,Object.fromEntries(new FormData(e.target))); api.fetchData(); e.target.reset(); }
         async function deleteResource(t,id){ if((await Swal.fire({title:'ยืนยันลบ?',showCancelButton:true})).isConfirmed){ await api.action('delete',`${t}/${id}`); api.fetchData(); } }
-        async function addUser(e){ e.preventDefault(); const btn=e.target.querySelector('button'); setLoading(btn, true); await api.action('post','users',Object.fromEntries(new FormData(e.target))); api.fetchData(); e.target.reset(); setLoading(btn, false); }
+        async function addUser(e){ e.preventDefault(); await api.action('post','users',Object.fromEntries(new FormData(e.target))); api.fetchData(); e.target.reset(); }
         
         function openEditUserModal(id){ const u=state.users.find(x=>x._id===id); modalData=u; document.getElementById('eu-fn').value=u.firstName; document.getElementById('eu-ln').value=u.lastName; document.getElementById('eu-dept').value=u.department; document.getElementById('eu-email').value=u.email; openModal('editUserModal'); }
-        async function handleEditUserSubmit(e){ e.preventDefault(); const btn=e.target.querySelector('button'); setLoading(btn, true); await api.action('put',`users/${modalData._id}`,Object.fromEntries(new FormData(e.target))); closeModal(); api.fetchData(); setLoading(btn, false); }
+        async function handleEditUserSubmit(e){ e.preventDefault(); await api.action('put',`users/${modalData._id}`,Object.fromEntries(new FormData(e.target))); closeModal(); api.fetchData(); }
         function openResetPwdModal(id,u){ modalData={id,username:u}; openModal('resetPwdModal'); }
-        async function handleResetPwd(e){ e.preventDefault(); const btn=e.target.querySelector('button'); setLoading(btn, true); await api.action('put',`users/${modalData.id}`,{password:new FormData(e.target).get('password')}); closeModal(); Swal.fire('Success'); setLoading(btn, false); }
+        async function handleResetPwd(e){ e.preventDefault(); await api.action('put',`users/${modalData.id}`,{password:new FormData(e.target).get('password')}); closeModal(); Swal.fire('Success'); }
         async function toggleUser(id, curr){ await api.action('put',`users/${id}`,{isActive:!curr}); api.fetchData(); }
         
         function openEditBookingModal(id){ 
@@ -1382,47 +703,19 @@
         function openExtendModal(id) { const b = state.bookings.find(x => x._id === id); modalData = b; document.getElementById('ext-date').value = b.endDate; document.getElementById('ext-time').value = b.endTime; openModal('extendModal'); }
         async function handleExtendSubmit(e) { e.preventDefault(); const btn=e.target.querySelector('button'); setLoading(btn, true); const d = { newEndDate: document.getElementById('ext-date').value, newEndTime: document.getElementById('ext-time').value }; const r = await api.action('post', `bookings/${modalData._id}/extend`, d); if (r.success) { closeModal(); Swal.fire('Success', 'ต่อเวลาเรียบร้อย', 'success'); api.fetchData(); } else { Swal.fire('Error', r.message, 'error'); } setLoading(btn, false); }
         
-        // 🛡️ MODIFIED: Open Bulk Maintenance with Dynamic Placeholder
         function openBulkMaintenanceModal(type, id, name) { 
             bulkState={...bulkState, resourceType:type, resourceId:id, resourceName:name, selectedDates:new Set()}; 
             state.bookings.forEach(b=>{if(b.status==='maintenance' && ((type==='car' && b.carId?._id===id) || (type==='driver' && b.driverId?._id===id))) bulkState.selectedDates.add(b.startDate)}); 
-            
-            // Set dynamic placeholder
             const remarkInput = document.getElementById('bulk-remark');
             remarkInput.value = '';
             remarkInput.placeholder = type === 'driver' ? 'ระบุสาเหตุ (เช่น ลาป่วย, ลากิจ)' : 'ระบุสาเหตุ (เช่น ซ่อมบำรุง, ต่อพรบ.)';
-            
             renderBulkCalendar(); 
             openModal('bulkMaintenanceModal'); 
         }
-
         function renderBulkCalendar() { const start=bulkState.currentMonth.startOf('month').startOf('week'), end=bulkState.currentMonth.endOf('month').endOf('week'), grid=document.getElementById('bulk-calendar-grid'); document.getElementById('bulk-month-label').innerText=bulkState.currentMonth.format('MMMM YYYY'); grid.innerHTML=''; let day=start; while(day.isBefore(end)){ const ds=day.format('YYYY-MM-DD'); const isSel=bulkState.selectedDates.has(ds); const isCurr=day.isSame(bulkState.currentMonth,'month'); const conflict=state.bookings.some(b=>b.status!=='maintenance'&&b.status!=='cancelled'&&dayjs(b.startDate).isSame(day,'day')&&((bulkState.resourceType==='car'&&b.carId?._id===bulkState.resourceId)||(bulkState.resourceType==='driver'&&b.driverId?._id===bulkState.resourceId))); const el=document.createElement('div'); el.className=`bulk-day ${isSel?'selected':''} ${conflict?'has-conflict':''} ${!isCurr?'opacity-30':''}`; el.innerHTML=`<span class="text-sm">${day.date()}</span>${conflict?'<div class="dot-indicator dot-conflict"></div>':''}`; el.onclick=()=>toggleBulkDate(ds); grid.appendChild(el); day=day.add(1,'day'); } }
         function toggleBulkDate(d){ if(bulkState.selectedDates.has(d)) bulkState.selectedDates.delete(d); else bulkState.selectedDates.add(d); renderBulkCalendar(); }
         function toggleBulkDayColumn(idx){ let d=bulkState.currentMonth.startOf('month'); while(d.day()!==idx) d=d.add(1,'day'); let all=true, days=[]; while(d.isSame(bulkState.currentMonth,'month')||d.isBefore(bulkState.currentMonth.endOf('month'))){ const s=d.format('YYYY-MM-DD'); days.push(s); if(!bulkState.selectedDates.has(s)) all=false; d=d.add(7,'day'); } days.forEach(x=>{if(all)bulkState.selectedDates.delete(x);else bulkState.selectedDates.add(x)}); renderBulkCalendar(); }
-        
-        // 🛡️ MODIFIED: Submit Bulk Maintenance with Dynamic Default Reason
-        async function submitBulkMaintenance(){ 
-            const btn=document.querySelector('#bulkMaintenanceModal button.bg-orange-600'); 
-            setLoading(btn, true); 
-            
-            // Set dynamic default reason
-            const defaultReason = bulkState.resourceType === 'driver' ? 'ลาหยุด' : 'ซ่อมบำรุง';
-            const rem = document.getElementById('bulk-remark').value || defaultReason; 
-            
-            const sel=Array.from(bulkState.selectedDates); 
-            const curr=state.bookings.filter(b=>b.status==='maintenance'&&((bulkState.resourceType==='car'&&b.carId?._id===bulkState.resourceId)||(bulkState.resourceType==='driver'&&b.driverId?._id===bulkState.resourceId))); 
-            const currDs=new Set(curr.map(b=>b.startDate)); const add=sel.filter(d=>!currDs.has(d)), rems=curr.filter(b=>!bulkState.selectedDates.has(b.startDate)); 
-            try { 
-                for(const b of rems) await api.action('delete',`bookings/${b._id}`); 
-                for(const d of add) {
-                    const res = await api.action('post','bookings',{startDate:d,startTime:'00:00',endDate:d,endTime:'23:59',status:'maintenance',remarks:`[ปิด] ${rem}`,userId:state.currentUser.username,carId:bulkState.resourceType==='car'?bulkState.resourceId:null,driverId:bulkState.resourceType==='driver'?bulkState.resourceId:null}); 
-                    if(!res.success) throw new Error(`วันที่ ${dayjs(d).format('DD/MM/YY')}: ${res.message}`);
-                }
-                Swal.fire('Success', 'บันทึกสำเร็จ', 'success'); closeModal(); api.fetchData(); 
-            } catch(e){ Swal.fire('Error',e.message,'error'); } 
-            setLoading(btn, false); 
-        }
-
+        async function submitBulkMaintenance(){ const btn=document.querySelector('#bulkMaintenanceModal button.bg-orange-600'); setLoading(btn, true); const defaultReason = bulkState.resourceType === 'driver' ? 'ลาหยุด' : 'ซ่อมบำรุง'; const rem = document.getElementById('bulk-remark').value || defaultReason; const sel=Array.from(bulkState.selectedDates); const curr=state.bookings.filter(b=>b.status==='maintenance'&&((bulkState.resourceType==='car'&&b.carId?._id===bulkState.resourceId)||(bulkState.resourceType==='driver'&&b.driverId?._id===bulkState.resourceId))); const currDs=new Set(curr.map(b=>b.startDate)); const add=sel.filter(d=>!currDs.has(d)), rems=curr.filter(b=>!bulkState.selectedDates.has(b.startDate)); try { for(const b of rems) await api.action('delete',`bookings/${b._id}`); for(const d of add) { const res = await api.action('post','bookings',{startDate:d,startTime:'00:00',endDate:d,endTime:'23:59',status:'maintenance',remarks:`[ปิด] ${rem}`,userId:state.currentUser.username,carId:bulkState.resourceType==='car'?bulkState.resourceId:null,driverId:bulkState.resourceType==='driver'?bulkState.resourceId:null}); if(!res.success) throw new Error(`วันที่ ${dayjs(d).format('DD/MM/YY')}: ${res.message}`); } Swal.fire('Success', 'บันทึกสำเร็จ', 'success'); closeModal(); api.fetchData(); } catch(e){ Swal.fire('Error',e.message,'error'); } setLoading(btn, false); }
         function showBookingDetails(id) { const b = state.bookings.find(x => x._id === id); if(!b) return; const car = (b.carId && b.carId.name) ? b.carId : (state.cars.find(c => c._id === b.carId) || {name: '-', plate: '-'}); const driver = (b.driverId && b.driverId.name) ? b.driverId : (state.drivers.find(d => d._id === b.driverId) || {name: '-', phone: '-'}); const user = state.users.find(u => u.username === b.userId) || {firstName: b.userId, lastName: '', department: '-'}; const formatDate = (d) => dayjs(d).format('DD MMM BBBB'); Swal.fire({ html: `<div class="text-left space-y-4"><div class="flex justify-between items-start border-b pb-3"><div><h3 class="font-bold text-lg text-gray-800 leading-tight">${b.remarks || 'ไม่มีรายละเอียด'}</h3></div><span class="px-3 py-1 rounded-full text-xs font-bold uppercase status-${b.status} text-white">${b.status}</span></div><div class="flex items-center gap-3 bg-blue-50 p-3 rounded-xl border border-blue-100"><div class="flex-1"><p class="text-[10px] text-gray-500 uppercase">เริ่มต้น</p><p class="font-bold text-sm text-blue-700">${formatDate(b.startDate)}</p><p class="text-xs font-mono text-gray-600 bg-white inline-block px-1.5 rounded mt-0.5">${b.startTime}</p></div><div class="text-blue-300"><i data-lucide="arrow-right" class="w-5 h-5"></i></div><div class="flex-1 text-right"><p class="text-[10px] text-gray-500 uppercase">สิ้นสุด</p><p class="font-bold text-sm text-blue-700">${formatDate(b.endDate)}</p><p class="text-xs font-mono text-gray-600 bg-white inline-block px-1.5 rounded mt-0.5">${b.endTime}</p></div></div><div class="grid grid-cols-2 gap-3"><div class="border p-3 rounded-xl bg-white"><p class="text-[10px] text-gray-400 uppercase font-bold mb-1">ยานพาหนะ</p><p class="font-bold text-sm text-gray-800">${car.name}</p><p class="text-xs bg-gray-100 text-gray-600 inline-block px-1.5 py-0.5 rounded mt-1 font-mono">${car.plate}</p></div><div class="border p-3 rounded-xl bg-white"><p class="text-[10px] text-gray-400 uppercase font-bold mb-1">คนขับ</p><p class="font-bold text-sm text-gray-800">${driver.name}</p><p class="text-xs text-gray-500 mt-1">${driver.phone}</p></div></div></div>`, showConfirmButton: true, confirmButtonText: 'ปิดหน้าต่าง', confirmButtonColor: '#3b82f6', }); }
         function logout(){ localStorage.clear(); state.currentUser=null; renderApp(); }
         function exportCSV(){ const csv="\uFEFFDate,User,Car,Driver,Start,End,Fuel,Toll\n"+state.bookings.map(b=>`${b.startDate},"${b.userId}","${b.carId ? b.carId.name + ' (' + b.carId.plate + ')' : '-'}","${b.driverId?.name||'-'}",${b.startOdometer||0},${b.endOdometer||0},${b.fuelCost||0},${b.tollCost||0}`).join('\n'); const a=document.createElement('a'); a.href='data:text/csv;charset=utf-8,'+encodeURI(csv); a.download='report.csv'; a.click(); }
@@ -1445,9 +738,10 @@
             <div id="editUserModal" class="modal fixed inset-0 bg-black/70 flex items-center justify-center p-4"><div class="bg-white p-6 rounded-2xl w-full max-w-md modal-content shadow-2xl"><h3 class="font-bold mb-6 text-lg">แก้ไขข้อมูลผู้ใช้</h3><form onsubmit="handleEditUserSubmit(event)" class="space-y-4"><div class="grid grid-cols-2 gap-4"><input id="eu-fn" name="firstName" placeholder="ชื่อ" class="w-full border p-3 rounded-lg" required><input id="eu-ln" name="lastName" placeholder="สกุล" class="w-full border p-3 rounded-lg" required></div><select id="eu-dept" name="department" class="w-full border p-3 rounded-lg bg-white" required>${DEPARTMENTS.map(d=>`<option value="${d}">${d}</option>`).join('')}</select><input id="eu-email" name="email" placeholder="Email" class="w-full border p-3 rounded-lg"><div class="flex justify-end gap-3 mt-6"><button type="button" onclick="closeModal()" class="text-gray-500">ยกเลิก</button><button class="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold"><span>บันทึก</span></button></div></form></div></div>
             <div id="editBookingModal" class="modal fixed inset-0 bg-black/70 flex items-center justify-center p-4"><div class="bg-white p-6 rounded-2xl w-full max-w-md modal-content shadow-2xl"><h3 class="font-bold mb-6 text-blue-600 text-lg">แก้ไขข้อมูลงานจอง</h3><form onsubmit="handleEditBookingSubmit(event)" class="space-y-4"><div><label class="text-xs font-bold text-gray-500">เปลี่ยนรถ (เฉพาะคันที่ว่าง)</label><select id="eb-car" class="w-full border p-2.5 rounded-lg text-sm"></select></div><div><label class="text-xs font-bold text-gray-500">เปลี่ยนคนขับ (เฉพาะคนที่ว่าง)</label><select id="eb-driver" class="w-full border p-2.5 rounded-lg text-sm"></select></div><div class="grid grid-cols-2 gap-4"><div><label class="text-xs font-bold text-gray-500">ไมล์เริ่ม</label><input type="number" id="eb-s-odo" class="w-full border p-2 rounded-lg text-sm"></div><div><label class="text-xs font-bold text-gray-500">ไมล์จบ</label><input type="number" id="eb-e-odo" class="w-full border p-2 rounded-lg text-sm"></div></div><div class="grid grid-cols-2 gap-4"><div><label class="text-xs font-bold text-gray-500">น้ำมัน</label><input type="number" id="eb-fuel" class="w-full border p-2 rounded-lg text-sm"></div><div><label class="text-xs font-bold text-gray-500">ทางด่วน</label><input type="number" id="eb-toll" class="w-full border p-2 rounded-lg text-sm"></div></div><div class="flex justify-end gap-3 mt-6"><button type="button" onclick="closeModal()" class="text-gray-500">ยกเลิก</button><button class="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold"><span>บันทึก</span></button></div></form></div></div>
             <div id="extendModal" class="modal fixed inset-0 bg-black/70 flex items-center justify-center p-4"><div class="bg-white p-6 rounded-2xl w-full max-w-sm modal-content shadow-2xl"><h3 class="font-bold mb-4 text-lg text-yellow-600">⏳ ขยายเวลาการจอง</h3><form onsubmit="handleExtendSubmit(event)" class="space-y-4"><div><label class="text-xs text-gray-500 font-bold">วันที่คืนใหม่</label><input type="date" id="ext-date" class="w-full border p-3 rounded-lg bg-yellow-50" required></div><div><label class="text-xs text-gray-500 font-bold">เวลาคืนใหม่</label><input type="time" id="ext-time" class="w-full border p-3 rounded-lg bg-yellow-50" required></div><div class="flex justify-end gap-3 mt-6"><button type="button" onclick="closeModal()" class="text-gray-500">ยกเลิก</button><button class="bg-yellow-500 text-white px-6 py-2 rounded-lg font-bold"><span>ยืนยัน</span></button></div></form></div></div>
-            <div id="bulkMaintenanceModal" class="modal fixed inset-0 bg-black/80 flex items-center justify-center p-4"><div class="bg-white p-6 rounded-2xl w-full max-w-2xl modal-content flex flex-col h-[90vh]"><div class="flex justify-between items-center mb-4"><h3 class="font-bold text-xl text-orange-600">จัดการวันหยุด/ซ่อม</h3><button onclick="closeModal()" class="text-gray-400 hover:text-gray-600"><i data-lucide="x"></i></button></div><div class="flex items-center justify-between mb-4 bg-gray-50 p-2 rounded-lg"><button onclick="bulkState.currentMonth=bulkState.currentMonth.subtract(1,'month');renderBulkCalendar()" class="p-2 hover:bg-white rounded"><i data-lucide="chevron-left"></i></button><span id="bulk-month-label" class="font-bold text-lg"></span><button onclick="bulkState.currentMonth=bulkState.currentMonth.add(1,'month');renderBulkCalendar()" class="p-2 hover:bg-white rounded"><i data-lucide="chevron-right"></i></button></div><div class="grid grid-cols-7 gap-2 mb-2 text-center text-xs font-bold text-gray-500 uppercase"><div onclick="toggleBulkDayColumn(0)" class="bulk-header">อา</div><div onclick="toggleBulkDayColumn(1)" class="bulk-header">จ</div><div onclick="toggleBulkDayColumn(2)" class="bulk-header">อ</div><div onclick="toggleBulkDayColumn(3)" class="bulk-header">พ</div><div onclick="toggleBulkDayColumn(4)" class="bulk-header">พฤ</div><div onclick="toggleBulkDayColumn(5)" class="bulk-header">ศ</div><div onclick="toggleBulkDayColumn(6)" class="bulk-header">ส</div></div><div id="bulk-calendar-grid" class="grid grid-cols-7 gap-2 flex-1 overflow-y-auto p-1"></div><div class="mt-4 pt-4 border-t space-y-3"><input id="bulk-remark" class="w-full border p-3 rounded-lg text-sm" placeholder="สาเหตุ"><div class="flex justify-end gap-3"><button onclick="closeModal()" class="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">ยกเลิก</button><button onclick="submitBulkMaintenance()" class="px-6 py-2 bg-orange-600 text-white rounded-lg font-bold">บันทึก</button></div></div></div></div>`;
+            <div id="bulkMaintenanceModal" class="modal fixed inset-0 bg-black/80 flex items-center justify-center p-4"><div class="bg-white p-6 rounded-2xl w-full max-w-2xl modal-content flex flex-col h-[90vh]"><div class="flex justify-between items-center mb-4"><h3 class="font-bold text-xl text-orange-600">จัดการวันหยุด/ซ่อม</h3><button onclick="closeModal()" class="text-gray-400 hover:text-gray-600"><i data-lucide="x"></i></button></div><div class="flex items-center justify-between mb-4 bg-gray-50 p-2 rounded-lg"><button onclick="bulkState.currentMonth=bulkState.currentMonth.subtract(1,'month');renderBulkCalendar()" class="p-2 hover:bg-white rounded"><i data-lucide="chevron-left"></i></button><span id="bulk-month-label" class="font-bold text-lg"></span><button onclick="bulkState.currentMonth=bulkState.currentMonth.add(1,'month');renderBulkCalendar()" class="p-2 hover:bg-white rounded"><i data-lucide="chevron-right"></i></button></div><div class="grid grid-cols-7 gap-2 mb-2 text-center text-xs font-bold text-gray-500 uppercase"><div onclick="toggleBulkDayColumn(0)" class="bulk-header">อา</div><div onclick="toggleBulkDayColumn(1)" class="bulk-header">จ</div><div onclick="toggleBulkDayColumn(2)" class="bulk-header">อ</div><div onclick="toggleBulkDayColumn(3)" class="bulk-header">พ</div><div onclick="toggleBulkDayColumn(4)" class="bulk-header">พฤ</div><div onclick="toggleBulkDayColumn(5)" class="bulk-header">ศ</div><div onclick="toggleBulkDayColumn(6)" class="bulk-header">ส</div></div><div id="bulk-calendar-grid" class="grid grid-cols-7 gap-2 flex-1 overflow-y-auto p-1"></div><div class="mt-4 pt-4 border-t space-y-3"><input id="bulk-remark" class="w-full border p-3 rounded-lg text-sm" placeholder="สาเหตุ"><div class="flex justify-end gap-3"><button onclick="closeModal()" class="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">ยกเลิก</button><button onclick="submitBulkMaintenance()" class="px-6 py-2 bg-orange-600 text-white rounded-lg font-bold">บันทึก</button></div></div></div></div>
+            `;
         }
-        
+
         window.onload = () => { renderApp(); if(state.currentUser) api.fetchData(); };
     </script>
 </body>
