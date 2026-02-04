@@ -122,11 +122,12 @@
             currentUser: null, 
             viewMode: 'dashboard', 
             historyFilter: 'trips', 
-            filters: { search: '', status: 'all', startDate: '', endDate: '' }, // Filter state
+            filters: { search: '', status: 'all', startDate: '', endDate: '' }, 
             bookings: [], cars: [], drivers: [], users: [], stats: {}, 
             currentDate: new Date(),
             showStats: false, 
-            dashboardDetailType: null 
+            dashboardDetailType: null,
+            lineStatus: { connected: false, groupId: null }
         };
         let modalData = {};
         let bulkState = { selectedDates: new Set(), currentMonth: dayjs(), resourceType: null, resourceId: null, resourceName: null };
@@ -162,12 +163,14 @@
                     state.bookings = b.data || [];
                     
                     if (state.currentUser?.role === 'admin') {
-                        const [u, s] = await Promise.all([
+                        const [u, s, l] = await Promise.all([
                             axios.get(`${API_URL}/users`).catch(()=>({data:[]})), 
-                            axios.get(`${API_URL}/stats`).catch(()=>({data:{}}))
+                            axios.get(`${API_URL}/stats`).catch(()=>({data:{}})),
+                            axios.get(`${API_URL}/system-status`).catch(()=>({data:{connected:false}}))
                         ]);
                         state.users = u.data || []; 
                         state.stats = s.data || {};
+                        state.lineStatus = l.data || {connected: false};
                     } else {
                          const u = await axios.get(`${API_URL}/colleagues`).catch(()=>({data:[]}));
                          state.users = u.data || []; 
@@ -393,7 +396,7 @@
             if(state.currentUser.role==='admin' && state.viewMode==='dashboard') setTimeout(renderCharts, 100);
         }
 
-        // --- 📊 ADMIN DASHBOARD ---
+        // --- 📊 ADMIN DASHBOARD (IMPROVED) ---
         function renderAdminDashboard(c) {
             const pending = state.bookings.filter(b => b.status === 'pending');
             const approved = state.bookings.filter(b => b.status === 'approved'); 
@@ -401,6 +404,23 @@
             const todayJobs = state.bookings.filter(b => dayjs(b.startDate).isSame(today, 'day') && !['cancelled', 'rejected'].includes(b.status));
             const activeBookings = state.bookings.filter(b => b.status === 'active');
             
+            // 🆕 LINE STATUS INDICATOR
+            const lineStatusHtml = state.lineStatus.connected 
+                ? `<div class="bg-green-50 p-4 rounded-xl border border-green-100 flex justify-between items-center">
+                     <div>
+                        <div class="text-xs font-bold text-green-600 uppercase mb-1">LINE Notify Status</div>
+                        <div class="flex items-center gap-2 text-green-700 font-bold"><i data-lucide="check-circle" class="w-4 h-4"></i> Online (Connected)</div>
+                     </div>
+                     <button onclick="forceSummary(this)" class="bg-green-600 text-white px-4 py-2 rounded-lg text-xs font-bold shadow-sm hover:bg-green-700 transition">🔔 ทดสอบส่งสรุป</button>
+                   </div>`
+                : `<div class="bg-red-50 p-4 rounded-xl border border-red-100 flex justify-between items-center">
+                     <div>
+                        <div class="text-xs font-bold text-red-600 uppercase mb-1">LINE Notify Status</div>
+                        <div class="flex items-center gap-2 text-red-700 font-bold"><i data-lucide="alert-circle" class="w-4 h-4"></i> Offline (Disconnected)</div>
+                     </div>
+                     <button onclick="Swal.fire({title:'วิธีเชื่อมต่อ', html:'1. เปิดกลุ่ม LINE Admin<br>2. พิมพ์คำสั่ง <b>!setup admin</b><br>3. รอระบบตอบกลับ', icon:'info'})" class="bg-red-600 text-white px-4 py-2 rounded-lg text-xs font-bold shadow-sm hover:bg-red-700 transition">ดูวิธีแก้ไข</button>
+                   </div>`;
+
             // Logic for Detail View
             let detailTitle = '';
             let detailList = [];
@@ -416,6 +436,9 @@
 
             c.innerHTML = `
             <div class="space-y-6">
+                <!-- System Status -->
+                ${lineStatusHtml}
+
                 <!-- 1. Interactive Summary Cards -->
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <button onclick="showDashboardDetail('today')" class="text-left bg-white p-5 rounded-2xl shadow-sm border border-l-4 border-l-blue-500 hover:shadow-md transition group relative overflow-hidden">
@@ -523,8 +546,8 @@
                                                     </select>
 
                                                     <div class="flex gap-2 mt-1">
-                                                        <button onclick="approveBooking(this, '${b._id}')" class="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-bold shadow-sm hover:bg-blue-700 transition"><span>อนุมัติ</span></button>
-                                                        <button onclick="rejectBooking(this, '${b._id}')" class="flex-1 bg-white border border-red-200 text-red-500 py-2 rounded-lg text-sm font-bold hover:bg-red-50 transition"><span>ปฏิเสธ</span></button>
+                                                        <button onclick="approveBooking('${b._id}')" class="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-bold shadow-sm hover:bg-blue-700 transition"><span>อนุมัติ</span></button>
+                                                        <button onclick="rejectBooking('${b._id}')" class="flex-1 bg-white border border-red-200 text-red-500 py-2 rounded-lg text-sm font-bold hover:bg-red-50 transition"><span>ปฏิเสธ</span></button>
                                                     </div>
                                                 </div>
                                             </div>
@@ -565,61 +588,29 @@
                     <div class="space-y-6">
                         <div class="bg-white p-5 rounded-2xl shadow-sm border">
                             <h3 class="font-bold mb-4 flex items-center gap-2 text-gray-800"><div class="bg-blue-100 p-1.5 rounded"><i data-lucide="car" class="text-blue-600 w-4 h-4"></i></div> จัดการรถ</h3>
-                            <form onsubmit="addResource(event,'cars')" class="flex gap-2 mb-4">
-                                <input name="name" placeholder="ชื่อรุ่น" class="border p-2 rounded-lg text-sm flex-1 outline-none focus:border-blue-500" required>
-                                <input name="plate" placeholder="ทะเบียน" class="border p-2 rounded-lg text-sm w-24 outline-none focus:border-blue-500" required>
-                                <button class="bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700 transition shadow-sm"><span><i data-lucide="plus" class="w-5 h-5"></i></span></button>
-                            </form>
-                            <div class="max-h-64 overflow-y-auto custom-scrollbar pr-1 space-y-2">
-                                ${state.cars.map(i=>`
-                                    <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg border border-gray-100 hover:shadow-sm transition group">
-                                        <div>
-                                            <div class="font-bold text-sm text-gray-800">${i.name}</div>
-                                            <div class="text-xs text-gray-500 flex items-center gap-1">
-                                                <span class="bg-blue-100 text-blue-700 px-1.5 rounded font-mono">${i.plate}</span> 
-                                                <span>• ${i.currentOdometer?.toLocaleString()||0} km</span>
-                                            </div>
-                                        </div>
-                                        <div class="flex gap-1 opacity-60 group-hover:opacity-100 transition">
-                                            <button onclick="openBulkMaintenanceModal('car','${i._id}','${i.name}')" class="text-orange-600 bg-white border border-orange-200 p-1.5 rounded-md hover:bg-orange-50 text-xs flex items-center gap-1 transition font-bold" title="แจ้งซ่อม">
-                                                <i data-lucide="wrench" class="w-3 h-3"></i>
-                                            </button>
-                                            <button onclick="deleteResource(this,'cars','${i._id}')" class="text-red-500 bg-white border border-red-200 p-1.5 rounded-md hover:bg-red-50 transition">
-                                                <span><i data-lucide="trash-2" class="w-3 h-3"></i></span>
-                                            </button>
-                                        </div>
-                                    </div>`).join('')}
-                            </div>
+                            <form onsubmit="addResource(event,'cars')" class="flex gap-2 mb-4"><input name="name" placeholder="ชื่อรุ่น" class="border p-2 rounded-lg text-sm flex-1 outline-none focus:border-blue-500" required><input name="plate" placeholder="ทะเบียน" class="border p-2 rounded-lg text-sm w-24 outline-none focus:border-blue-500" required><button class="bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700 transition shadow-sm"><span><i data-lucide="plus" class="w-5 h-5"></i></span></button></form>
+                            <div class="max-h-64 overflow-y-auto custom-scrollbar pr-1 space-y-2">${state.cars.map(i=>`<div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg border border-gray-100 hover:shadow-sm transition group"><div><div class="font-bold text-sm text-gray-800">${i.name}</div><div class="text-xs text-gray-500 flex items-center gap-1"><span class="bg-blue-100 text-blue-700 px-1.5 rounded font-mono">${i.plate}</span> <span>• ${i.currentOdometer?.toLocaleString()||0} km</span></div></div><div class="flex gap-1 opacity-60 group-hover:opacity-100 transition"><button onclick="openBulkMaintenanceModal('car','${i._id}','${i.name}')" class="text-orange-600 bg-white border border-orange-200 p-1.5 rounded-md hover:bg-orange-50 text-xs flex items-center gap-1 transition font-bold" title="แจ้งซ่อม"><i data-lucide="wrench" class="w-3 h-3"></i></button><button onclick="deleteResource('cars','${i._id}')" class="text-red-500 bg-white border border-red-200 p-1.5 rounded-md hover:bg-red-50 transition"><span><i data-lucide="trash-2" class="w-3 h-3"></i></span></button></div></div>`).join('')}</div>
                         </div>
-
                         <div class="bg-white p-5 rounded-2xl shadow-sm border">
                             <h3 class="font-bold mb-4 flex items-center gap-2 text-gray-800"><div class="bg-green-100 p-1.5 rounded"><i data-lucide="users" class="text-green-600 w-4 h-4"></i></div> จัดการคนขับ</h3>
-                            <form onsubmit="addResource(event,'drivers')" class="flex gap-2 mb-4">
-                                <input name="name" placeholder="ชื่อ-สกุล" class="border p-2 rounded-lg text-sm flex-1 outline-none focus:border-green-500" required>
-                                <input name="phone" placeholder="เบอร์โทร" class="border p-2 rounded-lg text-sm w-28 outline-none focus:border-green-500" required>
-                                <button class="bg-green-600 text-white p-2 rounded-lg hover:bg-green-700 transition shadow-sm"><span><i data-lucide="plus" class="w-5 h-5"></i></span></button>
-                            </form>
-                            <div class="max-h-64 overflow-y-auto custom-scrollbar pr-1 space-y-2">
-                                ${state.drivers.map(i=>`
-                                    <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg border border-gray-100 hover:shadow-sm transition group">
-                                        <div>
-                                            <div class="font-bold text-sm text-gray-800">${i.name}</div>
-                                            <div class="text-xs text-gray-500 flex items-center gap-1"><i data-lucide="phone" class="w-3 h-3"></i> ${i.phone}</div>
-                                        </div>
-                                        <div class="flex gap-1 opacity-60 group-hover:opacity-100 transition">
-                                            <button onclick="openBulkMaintenanceModal('driver','${i._id}','${i.name}')" class="text-orange-600 bg-white border border-orange-200 p-1.5 rounded-md hover:bg-orange-50 text-xs flex items-center gap-1 transition font-bold" title="วันหยุด">
-                                                <i data-lucide="calendar-off" class="w-3 h-3"></i>
-                                            </button>
-                                            <button onclick="deleteResource(this,'drivers','${i._id}')" class="text-red-500 bg-white border border-red-200 p-1.5 rounded-md hover:bg-red-50 transition">
-                                                <span><i data-lucide="trash-2" class="w-3 h-3"></i></span>
-                                            </button>
-                                        </div>
-                                    </div>`).join('')}
-                            </div>
+                            <form onsubmit="addResource(event,'drivers')" class="flex gap-2 mb-4"><input name="name" placeholder="ชื่อ-สกุล" class="border p-2 rounded-lg text-sm flex-1 outline-none focus:border-green-500" required><input name="phone" placeholder="เบอร์โทร" class="border p-2 rounded-lg text-sm w-28 outline-none focus:border-green-500" required><button class="bg-green-600 text-white p-2 rounded-lg hover:bg-green-700 transition shadow-sm"><span><i data-lucide="plus" class="w-5 h-5"></i></span></button></form>
+                            <div class="max-h-64 overflow-y-auto custom-scrollbar pr-1 space-y-2">${state.drivers.map(i=>`<div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg border border-gray-100 hover:shadow-sm transition group"><div><div class="font-bold text-sm text-gray-800">${i.name}</div><div class="text-xs text-gray-500 flex items-center gap-1"><i data-lucide="phone" class="w-3 h-3"></i> ${i.phone}</div></div><div class="flex gap-1 opacity-60 group-hover:opacity-100 transition"><button onclick="openBulkMaintenanceModal('driver','${i._id}','${i.name}')" class="text-orange-600 bg-white border border-orange-200 p-1.5 rounded-md hover:bg-orange-50 text-xs flex items-center gap-1 transition font-bold" title="วันหยุด"><i data-lucide="calendar-off" class="w-3 h-3"></i></button><button onclick="deleteResource('drivers','${i._id}')" class="text-red-500 bg-white border border-red-200 p-1.5 rounded-md hover:bg-red-50 transition"><span><i data-lucide="trash-2" class="w-3 h-3"></i></span></button></div></div>`).join('')}</div>
                         </div>
                     </div>
                 </div>
             </div>`;
+        }
+
+        // --- NEW: Force Summary Function ---
+        async function forceSummary(btn) {
+            setLoading(btn, true);
+            const res = await api.action('get', 'force-summary');
+            if (res.success) {
+                Swal.fire('สำเร็จ', res.data.message, 'success');
+            } else {
+                Swal.fire('ผิดพลาด', res.message, 'error');
+            }
+            setLoading(btn, false);
         }
 
         // --- HELPERS ---
@@ -813,7 +804,7 @@
                                             <div class="flex flex-col gap-2 items-end pt-1">
                                                 ${b.status==='approved' ? `
                                                     <!-- 🚀 MODIFIED: Start Job Button with Data Attributes -->
-                                                    <button onclick="startTrip(this, '${b._id}')" 
+                                                    <button onclick="startTrip('${b._id}')" 
                                                         data-action="start-trip" 
                                                         data-start="${b.startDate}T${b.startTime}"
                                                         class="px-4 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-all bg-gray-300 text-gray-500 cursor-not-allowed" disabled>
@@ -824,9 +815,9 @@
                                                 ${b.status==='active' ? `
                                                     <div class="flex flex-col gap-1 w-full items-end">
                                                         <button onclick="openExtendModal('${b._id}')" class="bg-yellow-500 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow hover:bg-yellow-600 flex items-center gap-1 transition transform hover:scale-105 w-fit">⏳ ขยายเวลา</button>
-                                                        <button onclick="endTrip(this, '${b._id}', ${b.startOdometer})" class="bg-gray-800 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow hover:bg-black flex items-center gap-1 transition transform hover:scale-105 w-fit"><span>🏁 คืนรถ</span></button>
+                                                        <button onclick="endTrip('${b._id}', ${b.startOdometer})" class="bg-gray-800 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow hover:bg-black flex items-center gap-1 transition transform hover:scale-105 w-fit"><span>🏁 คืนรถ</span></button>
                                                     </div>` : ''}
-                                                ${['pending','approved'].includes(b.status) ? `<button onclick="cancelBooking(this, '${b._id}')" class="text-red-500 text-xs font-medium hover:text-red-700 hover:underline px-2 py-1"><span>ยกเลิก</span></button>` : ''}
+                                                ${['pending','approved'].includes(b.status) ? `<button onclick="cancelBooking('${b._id}')" class="text-red-500 text-xs font-medium hover:text-red-700 hover:underline px-2 py-1"><span>ยกเลิก</span></button>` : ''}
                                             </div>
                                         </div>
                                     </div>
@@ -838,6 +829,7 @@
             </div>`;
         }
 
+        // --- 🚗 HELPER FUNCTIONS FOR CAR/DRIVER COUNTS ---
         async function checkAvail() { 
             const sd=document.getElementById('sd').value, st=document.getElementById('st').value, ed=document.getElementById('ed').value, et=document.getElementById('et').value, badge=document.getElementById('avail-badge'); 
             
@@ -913,6 +905,7 @@
             el.value = val;
         }
 
+        // --- HELPER FUNCTIONS FOR SLIDER LOGIC ---
         function resetToNow() {
             const now = dayjs();
             document.getElementById('sd').value = now.format('YYYY-MM-DD');
@@ -1184,10 +1177,10 @@
                                         <td class="p-4 align-top text-right">
                                             <div class="flex justify-end gap-1">
                                                 ${!isMaintenance && isAdmin ? `<button onclick="openEditBookingModal('${b._id}')" class="text-blue-500 bg-white border border-blue-100 p-1.5 rounded hover:bg-blue-50 transition" title="แก้ไข"><i data-lucide="edit-3" class="w-4 h-4"></i></button>` : ''}
-                                                ${canRecover ? `<button onclick="recoverBooking(this, '${b._id}')" class="text-green-500 bg-white border border-green-100 p-1.5 rounded hover:bg-green-50 transition" title="กู้คืน"><i data-lucide="rotate-ccw" class="w-4 h-4"></i></button>` : ''}
-                                                ${(!isMaintenance && isAdmin && b.status === 'active') ? `<button onclick="endTrip(this, '${b._id}', ${b.startOdometer||0})" class="text-purple-500 bg-white border border-purple-100 p-1.5 rounded hover:bg-purple-50 transition" title="จบงาน"><i data-lucide="check-circle" class="w-4 h-4"></i></button>` : ''}
-                                                ${isMaintenance && isAdmin ? `<button onclick="cancelBooking(this, '${b._id}')" class="text-red-500 bg-white border border-red-100 p-1.5 rounded hover:bg-red-50 transition" title="ลบรายการ"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : ''}
-                                                ${(!isMaintenance && (state.bookings.find(booking => booking._id === b._id).status === 'active' || ['pending', 'approved'].includes(b.status))) ? `<button onclick="cancelBooking(this, '${b._id}')" class="text-red-500 bg-white border border-red-100 p-1.5 rounded hover:bg-red-50 transition" title="ยกเลิก"><i data-lucide="x-circle" class="w-4 h-4"></i></button>` : ''}
+                                                ${canRecover ? `<button onclick="recoverBooking('${b._id}')" class="text-green-500 bg-white border border-green-100 p-1.5 rounded hover:bg-green-50 transition" title="กู้คืน"><i data-lucide="rotate-ccw" class="w-4 h-4"></i></button>` : ''}
+                                                ${(!isMaintenance && isAdmin && b.status === 'active') ? `<button onclick="endTrip('${b._id}', ${b.startOdometer||0})" class="text-purple-500 bg-white border border-purple-100 p-1.5 rounded hover:bg-purple-50 transition" title="จบงาน"><i data-lucide="check-circle" class="w-4 h-4"></i></button>` : ''}
+                                                ${isMaintenance && isAdmin ? `<button onclick="cancelBooking('${b._id}')" class="text-red-500 bg-white border border-red-100 p-1.5 rounded hover:bg-red-50 transition" title="ลบรายการ"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : ''}
+                                                ${(!isMaintenance && (state.bookings.find(booking => booking._id === b._id).status === 'active' || ['pending', 'approved'].includes(b.status))) ? `<button onclick="cancelBooking('${b._id}')" class="text-red-500 bg-white border border-red-100 p-1.5 rounded hover:bg-red-50 transition" title="ยกเลิก"><i data-lucide="x-circle" class="w-4 h-4"></i></button>` : ''}
                                             </div>
                                         </td>
                                     </tr>`;
@@ -1231,14 +1224,19 @@
                         <div class="flex-1 overflow-hidden space-y-1 px-1">
                             ${events.map(b => {
                                 if (b.status === 'maintenance') {
+                                    // 🔧 Distinct View for Maintenance/Day Off
                                     const isCar = !!b.carId;
+                                    // Handle populated object or ID string safely
                                     const carName = (b.carId && typeof b.carId === 'object') ? b.carId.name : (state.cars.find(c=>c._id===b.carId)?.name || 'Unknown Car');
                                     const driverName = (b.driverId && typeof b.driverId === 'object') ? b.driverId.name : (state.drivers.find(d=>d._id===b.driverId)?.name || 'Unknown Driver');
+                                    
                                     const text = isCar ? `🔧 ${carName}` : `⛔ ${driverName}`;
                                     const remark = b.remarks.replace('[ปิด]', '').trim();
                                     const tooltip = `${isCar ? 'แจ้งซ่อม/หยุดรถ' : 'คนขับหยุดงาน'}: ${remark || '-'}`;
+                                    
                                     return `<div onclick="showBookingDetails('${b._id}')" class="event-maintenance" title="${tooltip}">${text}</div>`;
                                 } else {
+                                    // 🚗 Standard Trip View
                                     let display = `${b.startTime} ${b.remarks}`;
                                     return `<div onclick="showBookingDetails('${b._id}')" class="event-pill status-${b.status} shadow-sm" title="${display}">${display}</div>`;
                                 }
@@ -1272,6 +1270,7 @@
         }
         
         function renderUserManagement(c) {
+            // SAFE GUARD: Check if users array exists
             if (!Array.isArray(state.users)) {
                 c.innerHTML = '<div class="p-8 text-center text-gray-500">กำลังโหลดข้อมูล...</div>';
                 return;
@@ -1294,9 +1293,11 @@
                         <thead class="bg-gray-50 text-gray-500 font-bold text-xs uppercase"><tr><th class="p-4">User</th><th class="p-4">Name</th><th class="p-4">Role</th><th class="p-4">Status</th><th class="p-4 text-right">Actions</th></tr></thead>
                         <tbody>
                             ${state.users.map(u => {
+                                // SAFE GUARD: Handle potentially missing fields to prevent crash
                                 const role = u.role ? u.role : 'user';
                                 const roleDisplay = role.toUpperCase();
-                                const isActive = u.isActive !== false;
+                                const isActive = u.isActive !== false; // Default true
+                                
                                 return `
                                 <tr class="hover:bg-gray-50 transition ${!isActive?'bg-gray-100 opacity-60':''}">
                                     <td class="p-4 font-bold text-gray-700">${u.username || '-'}</td>
@@ -1310,7 +1311,7 @@
                                         <button onclick="openEditUserModal('${u._id}')" class="bg-white border border-gray-200 text-gray-500 p-2 rounded-lg hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition" title="แก้ไข"><i data-lucide="edit" class="w-4 h-4"></i></button>
                                         <button onclick="openResetPwdModal('${u._id}','${u.username}')" class="bg-white border border-gray-200 text-gray-500 p-2 rounded-lg hover:bg-yellow-50 hover:text-yellow-600 hover:border-yellow-200 transition" title="รีเซ็ตพาส"><i data-lucide="key" class="w-4 h-4"></i></button>
                                         <button onclick="toggleUser('${u._id}', ${isActive})" class="border p-1.5 rounded text-xs w-8 ${isActive?'text-green-600 border-green-200 bg-green-50':'text-gray-400 border-gray-300 hover:bg-gray-100'}" title="สถานะ">${isActive?'ON':'OFF'}</button>
-                                        <button onclick="deleteResource(this,'users','${u._id}')" class="bg-white border border-gray-200 text-gray-400 p-2 rounded-lg hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition"><span><i data-lucide="trash-2" class="w-4 h-4"></i></span></button>
+                                        <button onclick="deleteResource('users','${u._id}')" class="bg-white border border-gray-200 text-gray-400 p-2 rounded-lg hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition"><span><i data-lucide="trash-2" class="w-4 h-4"></i></span></button>
                                     </td>
                                 </tr>`
                             }).join('')}
@@ -1320,11 +1321,12 @@
             </div>`;
         }
 
+        // --- ACTIONS WITH LOADING ---
         async function submitBooking(e){ e.preventDefault(); const btn=e.target.querySelector('button'); setLoading(btn, true); const d=Object.fromEntries(new FormData(e.target)); const r=await api.action('post','bookings',d); if(r.success){Swal.fire('Success','จองสำเร็จ รออนุมัติ','success'); api.fetchData(); e.target.reset(); document.getElementById('avail-badge').classList.add('hidden');} else{Swal.fire('Error',r.message,'error');} setLoading(btn, false); }
         async function toggleUserRole(id, currentRole) { if (id === state.currentUser._id) return Swal.fire('Error', 'คุณไม่สามารถเปลี่ยนสิทธิ์ตัวเองได้', 'error'); const newRole = currentRole === 'admin' ? 'user' : 'admin'; const action = newRole === 'admin' ? 'Promote เป็น Admin' : 'Demote เป็น User'; if((await Swal.fire({title:`ยืนยัน ${action}?`, icon:'warning', showCancelButton:true})).isConfirmed){ await api.action('put', `users/${id}`, { role: newRole }); api.fetchData(); Swal.fire('Success', 'อัปเดตสิทธิ์เรียบร้อย', 'success'); } }
-        async function approveBooking(btn, id){ const booking = state.bookings.find(x => x._id === id); const carId = document.getElementById(`c-${id}`).value; const driverId = document.getElementById(`d-${id}`).value; if(!carId) return Swal.fire('Warning', 'กรุณาเลือกรถ', 'warning'); if (booking.useDriver && !driverId) { return Swal.fire('Warning', 'งานนี้ผู้จองต้องการคนขับ กรุณาเลือกคนขับ', 'warning'); } setLoading(btn, true); const driverIdToSend = driverId === "" ? null : driverId; const res = await api.action('put', `bookings/${id}`, { status:'approved', carId, driverId: driverIdToSend }); if(res.success) { Swal.fire('Success', 'อนุมัติเรียบร้อย', 'success'); api.fetchData(); } else { Swal.fire('Error', res.message, 'error'); } setLoading(btn, false); }
-        async function rejectBooking(btn, id) { const { value: reason } = await Swal.fire({ title: 'ระบุเหตุผล', input: 'text', showCancelButton: true }); if (reason) { setLoading(btn, true); await api.action('put', `bookings/${id}`, { status: 'rejected', rejectionReason: reason }); api.fetchData(); setLoading(btn, false); } }
-        async function cancelBooking(btn, id) { 
+        async function approveBooking(id){ const booking = state.bookings.find(x => x._id === id); const carId = document.getElementById(`c-${id}`).value; const driverId = document.getElementById(`d-${id}`).value; if(!carId) return Swal.fire('Warning', 'กรุณาเลือกรถ', 'warning'); if (booking.useDriver && !driverId) { return Swal.fire('Warning', 'งานนี้ผู้จองต้องการคนขับ กรุณาเลือกคนขับ', 'warning'); } const driverIdToSend = driverId === "" ? null : driverId; const res = await api.action('put', `bookings/${id}`, { status:'approved', carId, driverId: driverIdToSend }); if(res.success) { Swal.fire('Success', 'อนุมัติเรียบร้อย', 'success'); api.fetchData(); } else { Swal.fire('Error', res.message, 'error'); } }
+        async function rejectBooking(id) { const { value: reason } = await Swal.fire({ title: 'ระบุเหตุผล', input: 'text', showCancelButton: true }); if (reason) { await api.action('put', `bookings/${id}`, { status: 'rejected', rejectionReason: reason }); api.fetchData(); } }
+        async function cancelBooking(id) { 
             const booking = state.bookings.find(b => b._id === id);
             const isActiveCancel = booking.status === 'active';
             const result = await Swal.fire({
@@ -1336,21 +1338,19 @@
                 confirmButtonText: 'ใช่, ยกเลิกเดี๋ยวนี้'
             });
             if(result.isConfirmed){ 
-                setLoading(btn, true); 
                 await api.action('put', `bookings/${id}`, { 
                     status: 'cancelled', 
                     rejectionReason: isActiveCancel ? 'Admin Forced Cancel (Was Active)' : 'User Cancelled', 
                     cancelledBy: state.currentUser.username 
                 }); 
                 api.fetchData(); 
-                setLoading(btn, false); 
             } 
         }
-        async function startTrip(btn, id){ const b = state.bookings.find(x => x._id === id); const startDateTime = dayjs(`${b.startDate}T${b.startTime}`); const now = dayjs(); const unlockTime = startDateTime.subtract(TRAVEL_BUFFER_MINUTES, 'minute'); if (now.isBefore(unlockTime)) { return Swal.fire({ icon: 'warning', title: 'ยังไม่ถึงเวลาเริ่มงาน', text: `ระบบอนุญาตให้กดเริ่มได้ล่วงหน้า ${TRAVEL_BUFFER_MINUTES} นาทีเท่านั้น (${unlockTime.format('HH:mm')})` }); } let co=0; if(b.carId){ const r=await axios.get(`${API_URL}/cars`); const c=r.data.find(x=>x._id===(b.carId._id||b.carId)); if(c) co=c.currentOdometer||0; } const {value:v}=await Swal.fire({ title:'เริ่มเดินทาง', html:`<div class="mb-2">ไมล์ปัจจุบัน: <b>${co}</b></div><input id="sw1" type="number" class="swal2-input" value="${co}">`, preConfirm:()=>{ const v=document.getElementById('sw1').value; if(v<co) Swal.showValidationMessage('ห้ามต่ำกว่าเดิม'); return v; } }); if(v){ setLoading(btn, true); await api.action('put',`bookings/${id}`,{status:'active',startOdometer:v}); api.fetchData(); setLoading(btn, false); } }
-        async function endTrip(btn, id,so){ const startOdo = Number(so) || 0; const {value:f}=await Swal.fire({ title:'คืนรถ', html:`<div class="text-left mb-2 text-sm text-gray-600">ไมล์เริ่มต้น: <b>${startOdo}</b></div><input id="eo" type="number" placeholder="เลขไมล์จบ (ต้องมากกว่า ${startOdo})" class="swal2-input"><input id="ef" type="number" placeholder="ค่าน้ำมัน (ถ้ามี)" class="swal2-input"><input id="et" type="number" placeholder="ค่าทางด่วน (ถ้ามี)" class="swal2-input">`, preConfirm:()=>{ const eo = document.getElementById('eo').value; const ef = document.getElementById('ef').value; const et = document.getElementById('et').value; if (!eo) return Swal.showValidationMessage('กรุณาระบุเลขไมล์จบ'); if (Number(eo) <= startOdo) return Swal.showValidationMessage('เลขไมล์จบต้องมากกว่าเลขไมล์เริ่มต้น'); return { endOdometer: Number(eo), fuelCost: Number(ef) || 0, tollCost: Number(et) || 0 }; } }); if(f){ setLoading(btn, true); try { await api.action('put',`bookings/${id}`,{status:'completed',...f}); Swal.fire('Success', 'บันทึกการคืนรถเรียบร้อย', 'success'); api.fetchData(); } catch(e) { Swal.fire('Error', e.message || 'เกิดข้อผิดพลาด', 'error'); } setLoading(btn, false); } }
-        async function recoverBooking(btn, id) { const { value: mode } = await Swal.fire({ title: 'กู้คืนงานนี้?', text: "งานที่ถูกยกเลิกจะกลับมาใช้งานได้อีกครั้ง", icon: 'question', showCancelButton: true, confirmButtonColor: '#10b981', cancelButtonColor: '#6b7280', confirmButtonText: 'ใช่, กู้คืน', cancelButtonText: 'ยกเลิก', input: 'radio', inputOptions: { 'approved': 'คืนสถานะ: อนุมัติแล้ว (Approved)', 'active': 'คืนสถานะ: กำลังใช้งาน (Active - เริ่มวิ่งทันที)' }, inputValue: 'approved', inputValidator: (value) => { if (!value) { return 'กรุณาเลือกสถานะที่ต้องการกู้คืน' } } }); if (mode) { let startOdo = 0; if (mode === 'active') { const b = state.bookings.find(x => x._id === id); let currentCarOdo = 0; if(b.carId){ const r = await axios.get(`${API_URL}/cars`); const c = r.data.find(x => x._id === (b.carId._id || b.carId)); if(c) currentCarOdo = c.currentOdometer || 0; } const { value: odo } = await Swal.fire({ title: 'ระบุเลขไมล์เริ่มต้น', input: 'number', inputValue: currentCarOdo, showCancelButton: true }); if (!odo) return; startOdo = odo; } setLoading(btn, true); try { const payload = { status: mode, cancelledBy: null, rejectionReason: null }; if (mode === 'active') { payload.startOdometer = startOdo; } await api.action('put', `bookings/${id}`, payload); Swal.fire('Success', 'กู้คืนงานเรียบร้อยแล้ว', 'success'); api.fetchData(); } catch (e) { Swal.fire('Error', e.message || 'ไม่สามารถกู้คืนได้ (เวลาอาจชนกับงานอื่น)', 'error'); } setLoading(btn, false); } }
+        async function startTrip(id){ const b = state.bookings.find(x => x._id === id); const startDateTime = dayjs(`${b.startDate}T${b.startTime}`); const now = dayjs(); const unlockTime = startDateTime.subtract(TRAVEL_BUFFER_MINUTES, 'minute'); if (now.isBefore(unlockTime)) { return Swal.fire({ icon: 'warning', title: 'ยังไม่ถึงเวลาเริ่มงาน', text: `ระบบอนุญาตให้กดเริ่มได้ล่วงหน้า ${TRAVEL_BUFFER_MINUTES} นาทีเท่านั้น (${unlockTime.format('HH:mm')})` }); } let co=0; if(b.carId){ const r=await axios.get(`${API_URL}/cars`); const c=r.data.find(x=>x._id===(b.carId._id||b.carId)); if(c) co=c.currentOdometer||0; } const {value:v}=await Swal.fire({ title:'เริ่มเดินทาง', html:`<div class="mb-2">ไมล์ปัจจุบัน: <b>${co}</b></div><input id="sw1" type="number" class="swal2-input" value="${co}">`, preConfirm:()=>{ const v=document.getElementById('sw1').value; if(v<co) Swal.showValidationMessage('ห้ามต่ำกว่าเดิม'); return v; } }); if(v){ await api.action('put',`bookings/${id}`,{status:'active',startOdometer:v}); api.fetchData(); } }
+        async function endTrip(id,so){ const startOdo = Number(so) || 0; const {value:f}=await Swal.fire({ title:'คืนรถ', html:`<div class="text-left mb-2 text-sm text-gray-600">ไมล์เริ่มต้น: <b>${startOdo}</b></div><input id="eo" type="number" placeholder="เลขไมล์จบ (ต้องมากกว่า ${startOdo})" class="swal2-input"><input id="ef" type="number" placeholder="ค่าน้ำมัน (ถ้ามี)" class="swal2-input"><input id="et" type="number" placeholder="ค่าทางด่วน (ถ้ามี)" class="swal2-input">`, preConfirm:()=>{ const eo = document.getElementById('eo').value; const ef = document.getElementById('ef').value; const et = document.getElementById('et').value; if (!eo) return Swal.showValidationMessage('กรุณาระบุเลขไมล์จบ'); if (Number(eo) <= startOdo) return Swal.showValidationMessage('เลขไมล์จบต้องมากกว่าเลขไมล์เริ่มต้น'); return { endOdometer: Number(eo), fuelCost: Number(ef) || 0, tollCost: Number(et) || 0 }; } }); if(f){ try { await api.action('put',`bookings/${id}`,{status:'completed',...f}); Swal.fire('Success', 'บันทึกการคืนรถเรียบร้อย', 'success'); api.fetchData(); } catch(e) { Swal.fire('Error', e.message || 'เกิดข้อผิดพลาด', 'error'); } } }
+        async function recoverBooking(id) { const { value: mode } = await Swal.fire({ title: 'กู้คืนงานนี้?', text: "งานที่ถูกยกเลิกจะกลับมาใช้งานได้อีกครั้ง", icon: 'question', showCancelButton: true, confirmButtonColor: '#10b981', cancelButtonColor: '#6b7280', confirmButtonText: 'ใช่, กู้คืน', cancelButtonText: 'ยกเลิก', input: 'radio', inputOptions: { 'approved': 'คืนสถานะ: อนุมัติแล้ว (Approved)', 'active': 'คืนสถานะ: กำลังใช้งาน (Active - เริ่มวิ่งทันที)' }, inputValue: 'approved', inputValidator: (value) => { if (!value) { return 'กรุณาเลือกสถานะที่ต้องการกู้คืน' } } }); if (mode) { let startOdo = 0; if (mode === 'active') { const b = state.bookings.find(x => x._id === id); let currentCarOdo = 0; if(b.carId){ const r = await axios.get(`${API_URL}/cars`); const c = r.data.find(x => x._id === (b.carId._id || b.carId)); if(c) currentCarOdo = c.currentOdometer || 0; } const { value: odo } = await Swal.fire({ title: 'ระบุเลขไมล์เริ่มต้น', input: 'number', inputValue: currentCarOdo, showCancelButton: true }); if (!odo) return; startOdo = odo; } try { const payload = { status: mode, cancelledBy: null, rejectionReason: null }; if (mode === 'active') { payload.startOdometer = startOdo; } await api.action('put', `bookings/${id}`, payload); Swal.fire('Success', 'กู้คืนงานเรียบร้อยแล้ว', 'success'); api.fetchData(); } catch (e) { Swal.fire('Error', e.message || 'ไม่สามารถกู้คืนได้ (เวลาอาจชนกับงานอื่น)', 'error'); } } }
         async function addResource(e,t){ e.preventDefault(); const btn=e.target.querySelector('button'); setLoading(btn, true); await api.action('post',t,Object.fromEntries(new FormData(e.target))); api.fetchData(); e.target.reset(); setLoading(btn, false); }
-        async function deleteResource(btn,t,id){ if((await Swal.fire({title:'ยืนยันลบ?',showCancelButton:true})).isConfirmed){ setLoading(btn, true); await api.action('delete',`${t}/${id}`); api.fetchData(); setLoading(btn, false); } }
+        async function deleteResource(t,id){ if((await Swal.fire({title:'ยืนยันลบ?',showCancelButton:true})).isConfirmed){ await api.action('delete',`${t}/${id}`); api.fetchData(); } }
         async function addUser(e){ e.preventDefault(); const btn=e.target.querySelector('button'); setLoading(btn, true); await api.action('post','users',Object.fromEntries(new FormData(e.target))); api.fetchData(); e.target.reset(); setLoading(btn, false); }
         
         function openEditUserModal(id){ const u=state.users.find(x=>x._id===id); modalData=u; document.getElementById('eu-fn').value=u.firstName; document.getElementById('eu-ln').value=u.lastName; document.getElementById('eu-dept').value=u.department; document.getElementById('eu-email').value=u.email; openModal('editUserModal'); }
@@ -1381,11 +1381,48 @@
 
         function openExtendModal(id) { const b = state.bookings.find(x => x._id === id); modalData = b; document.getElementById('ext-date').value = b.endDate; document.getElementById('ext-time').value = b.endTime; openModal('extendModal'); }
         async function handleExtendSubmit(e) { e.preventDefault(); const btn=e.target.querySelector('button'); setLoading(btn, true); const d = { newEndDate: document.getElementById('ext-date').value, newEndTime: document.getElementById('ext-time').value }; const r = await api.action('post', `bookings/${modalData._id}/extend`, d); if (r.success) { closeModal(); Swal.fire('Success', 'ต่อเวลาเรียบร้อย', 'success'); api.fetchData(); } else { Swal.fire('Error', r.message, 'error'); } setLoading(btn, false); }
-        function openBulkMaintenanceModal(type, id, name) { bulkState={...bulkState, resourceType:type, resourceId:id, resourceName:name, selectedDates:new Set()}; state.bookings.forEach(b=>{if(b.status==='maintenance' && ((type==='car' && b.carId?._id===id) || (type==='driver' && b.driverId?._id===id))) bulkState.selectedDates.add(b.startDate)}); document.getElementById('bulk-remark').value=''; renderBulkCalendar(); openModal('bulkMaintenanceModal'); }
+        
+        // 🛡️ MODIFIED: Open Bulk Maintenance with Dynamic Placeholder
+        function openBulkMaintenanceModal(type, id, name) { 
+            bulkState={...bulkState, resourceType:type, resourceId:id, resourceName:name, selectedDates:new Set()}; 
+            state.bookings.forEach(b=>{if(b.status==='maintenance' && ((type==='car' && b.carId?._id===id) || (type==='driver' && b.driverId?._id===id))) bulkState.selectedDates.add(b.startDate)}); 
+            
+            // Set dynamic placeholder
+            const remarkInput = document.getElementById('bulk-remark');
+            remarkInput.value = '';
+            remarkInput.placeholder = type === 'driver' ? 'ระบุสาเหตุ (เช่น ลาป่วย, ลากิจ)' : 'ระบุสาเหตุ (เช่น ซ่อมบำรุง, ต่อพรบ.)';
+            
+            renderBulkCalendar(); 
+            openModal('bulkMaintenanceModal'); 
+        }
+
         function renderBulkCalendar() { const start=bulkState.currentMonth.startOf('month').startOf('week'), end=bulkState.currentMonth.endOf('month').endOf('week'), grid=document.getElementById('bulk-calendar-grid'); document.getElementById('bulk-month-label').innerText=bulkState.currentMonth.format('MMMM YYYY'); grid.innerHTML=''; let day=start; while(day.isBefore(end)){ const ds=day.format('YYYY-MM-DD'); const isSel=bulkState.selectedDates.has(ds); const isCurr=day.isSame(bulkState.currentMonth,'month'); const conflict=state.bookings.some(b=>b.status!=='maintenance'&&b.status!=='cancelled'&&dayjs(b.startDate).isSame(day,'day')&&((bulkState.resourceType==='car'&&b.carId?._id===bulkState.resourceId)||(bulkState.resourceType==='driver'&&b.driverId?._id===bulkState.resourceId))); const el=document.createElement('div'); el.className=`bulk-day ${isSel?'selected':''} ${conflict?'has-conflict':''} ${!isCurr?'opacity-30':''}`; el.innerHTML=`<span class="text-sm">${day.date()}</span>${conflict?'<div class="dot-indicator dot-conflict"></div>':''}`; el.onclick=()=>toggleBulkDate(ds); grid.appendChild(el); day=day.add(1,'day'); } }
         function toggleBulkDate(d){ if(bulkState.selectedDates.has(d)) bulkState.selectedDates.delete(d); else bulkState.selectedDates.add(d); renderBulkCalendar(); }
         function toggleBulkDayColumn(idx){ let d=bulkState.currentMonth.startOf('month'); while(d.day()!==idx) d=d.add(1,'day'); let all=true, days=[]; while(d.isSame(bulkState.currentMonth,'month')||d.isBefore(bulkState.currentMonth.endOf('month'))){ const s=d.format('YYYY-MM-DD'); days.push(s); if(!bulkState.selectedDates.has(s)) all=false; d=d.add(7,'day'); } days.forEach(x=>{if(all)bulkState.selectedDates.delete(x);else bulkState.selectedDates.add(x)}); renderBulkCalendar(); }
-        async function submitBulkMaintenance(){ const btn=document.querySelector('#bulkMaintenanceModal button.bg-orange-600'); setLoading(btn, true); const rem=document.getElementById('bulk-remark').value||'ปิดปรับปรุง'; const sel=Array.from(bulkState.selectedDates); const curr=state.bookings.filter(b=>b.status==='maintenance'&&((bulkState.resourceType==='car'&&b.carId?._id===bulkState.resourceId)||(bulkState.resourceType==='driver'&&b.driverId?._id===bulkState.resourceId))); const currDs=new Set(curr.map(b=>b.startDate)); const add=sel.filter(d=>!currDs.has(d)), rems=curr.filter(b=>!bulkState.selectedDates.has(b.startDate)); try { for(const b of rems) await api.action('delete',`bookings/${b._id}`); for(const d of add) { const res = await api.action('post','bookings',{startDate:d,startTime:'00:00',endDate:d,endTime:'23:59',status:'maintenance',remarks:`[ปิด] ${rem}`,userId:state.currentUser.username,carId:bulkState.resourceType==='car'?bulkState.resourceId:null,driverId:bulkState.resourceType==='driver'?bulkState.resourceId:null}); if(!res.success) throw new Error(`วันที่ ${dayjs(d).format('DD/MM/YY')}: ${res.message}`); } Swal.fire('Success', 'บันทึกสำเร็จ', 'success'); closeModal(); api.fetchData(); } catch(e){ Swal.fire('Error',e.message,'error'); } setLoading(btn, false); }
+        
+        // 🛡️ MODIFIED: Submit Bulk Maintenance with Dynamic Default Reason
+        async function submitBulkMaintenance(){ 
+            const btn=document.querySelector('#bulkMaintenanceModal button.bg-orange-600'); 
+            setLoading(btn, true); 
+            
+            // Set dynamic default reason
+            const defaultReason = bulkState.resourceType === 'driver' ? 'ลาหยุด' : 'ซ่อมบำรุง';
+            const rem = document.getElementById('bulk-remark').value || defaultReason; 
+            
+            const sel=Array.from(bulkState.selectedDates); 
+            const curr=state.bookings.filter(b=>b.status==='maintenance'&&((bulkState.resourceType==='car'&&b.carId?._id===bulkState.resourceId)||(bulkState.resourceType==='driver'&&b.driverId?._id===bulkState.resourceId))); 
+            const currDs=new Set(curr.map(b=>b.startDate)); const add=sel.filter(d=>!currDs.has(d)), rems=curr.filter(b=>!bulkState.selectedDates.has(b.startDate)); 
+            try { 
+                for(const b of rems) await api.action('delete',`bookings/${b._id}`); 
+                for(const d of add) {
+                    const res = await api.action('post','bookings',{startDate:d,startTime:'00:00',endDate:d,endTime:'23:59',status:'maintenance',remarks:`[ปิด] ${rem}`,userId:state.currentUser.username,carId:bulkState.resourceType==='car'?bulkState.resourceId:null,driverId:bulkState.resourceType==='driver'?bulkState.resourceId:null}); 
+                    if(!res.success) throw new Error(`วันที่ ${dayjs(d).format('DD/MM/YY')}: ${res.message}`);
+                }
+                Swal.fire('Success', 'บันทึกสำเร็จ', 'success'); closeModal(); api.fetchData(); 
+            } catch(e){ Swal.fire('Error',e.message,'error'); } 
+            setLoading(btn, false); 
+        }
+
         function showBookingDetails(id) { const b = state.bookings.find(x => x._id === id); if(!b) return; const car = (b.carId && b.carId.name) ? b.carId : (state.cars.find(c => c._id === b.carId) || {name: '-', plate: '-'}); const driver = (b.driverId && b.driverId.name) ? b.driverId : (state.drivers.find(d => d._id === b.driverId) || {name: '-', phone: '-'}); const user = state.users.find(u => u.username === b.userId) || {firstName: b.userId, lastName: '', department: '-'}; const formatDate = (d) => dayjs(d).format('DD MMM BBBB'); Swal.fire({ html: `<div class="text-left space-y-4"><div class="flex justify-between items-start border-b pb-3"><div><h3 class="font-bold text-lg text-gray-800 leading-tight">${b.remarks || 'ไม่มีรายละเอียด'}</h3></div><span class="px-3 py-1 rounded-full text-xs font-bold uppercase status-${b.status} text-white">${b.status}</span></div><div class="flex items-center gap-3 bg-blue-50 p-3 rounded-xl border border-blue-100"><div class="flex-1"><p class="text-[10px] text-gray-500 uppercase">เริ่มต้น</p><p class="font-bold text-sm text-blue-700">${formatDate(b.startDate)}</p><p class="text-xs font-mono text-gray-600 bg-white inline-block px-1.5 rounded mt-0.5">${b.startTime}</p></div><div class="text-blue-300"><i data-lucide="arrow-right" class="w-5 h-5"></i></div><div class="flex-1 text-right"><p class="text-[10px] text-gray-500 uppercase">สิ้นสุด</p><p class="font-bold text-sm text-blue-700">${formatDate(b.endDate)}</p><p class="text-xs font-mono text-gray-600 bg-white inline-block px-1.5 rounded mt-0.5">${b.endTime}</p></div></div><div class="grid grid-cols-2 gap-3"><div class="border p-3 rounded-xl bg-white"><p class="text-[10px] text-gray-400 uppercase font-bold mb-1">ยานพาหนะ</p><p class="font-bold text-sm text-gray-800">${car.name}</p><p class="text-xs bg-gray-100 text-gray-600 inline-block px-1.5 py-0.5 rounded mt-1 font-mono">${car.plate}</p></div><div class="border p-3 rounded-xl bg-white"><p class="text-[10px] text-gray-400 uppercase font-bold mb-1">คนขับ</p><p class="font-bold text-sm text-gray-800">${driver.name}</p><p class="text-xs text-gray-500 mt-1">${driver.phone}</p></div></div></div>`, showConfirmButton: true, confirmButtonText: 'ปิดหน้าต่าง', confirmButtonColor: '#3b82f6', }); }
         function logout(){ localStorage.clear(); state.currentUser=null; renderApp(); }
         function exportCSV(){ const csv="\uFEFFDate,User,Car,Driver,Start,End,Fuel,Toll\n"+state.bookings.map(b=>`${b.startDate},"${b.userId}","${b.carId ? b.carId.name + ' (' + b.carId.plate + ')' : '-'}","${b.driverId?.name||'-'}",${b.startOdometer||0},${b.endOdometer||0},${b.fuelCost||0},${b.tollCost||0}`).join('\n'); const a=document.createElement('a'); a.href='data:text/csv;charset=utf-8,'+encodeURI(csv); a.download='report.csv'; a.click(); }
