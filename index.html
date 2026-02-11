@@ -127,7 +127,7 @@
             currentDate: new Date(),
             showStats: false, 
             dashboardDetailType: null,
-            lineStatus: { connected: false, groupId: null }
+            lineStatus: { lineConnected: false, groupId: null }
         };
         let modalData = {};
         let bulkState = { selectedDates: new Set(), currentMonth: dayjs(), resourceType: null, resourceId: null, resourceName: null };
@@ -166,11 +166,12 @@
                         const [u, s, l] = await Promise.all([
                             axios.get(`${API_URL}/users`).catch(()=>({data:[]})), 
                             axios.get(`${API_URL}/stats`).catch(()=>({data:{}})),
-                            axios.get(`${API_URL}/system-status`).catch(()=>({data:{connected:false}}))
+                            axios.get(`${API_URL}/system-status`).catch(()=>({data:{lineConnected:false}}))
                         ]);
                         state.users = u.data || []; 
                         state.stats = s.data || {};
-                        state.lineStatus = l.data || {connected: false};
+                        // ✅ FIX: เปลี่ยน fallback ให้ใช้ key ที่ถูกต้อง
+                        state.lineStatus = l.data || {lineConnected: false};
                     } else {
                          const u = await axios.get(`${API_URL}/colleagues`).catch(()=>({data:[]}));
                          state.users = u.data || []; 
@@ -404,8 +405,8 @@
             const todayJobs = state.bookings.filter(b => dayjs(b.startDate).isSame(today, 'day') && !['cancelled', 'rejected'].includes(b.status));
             const activeBookings = state.bookings.filter(b => b.status === 'active');
             
-            // 🆕 LINE STATUS INDICATOR
-            const lineStatusHtml = state.lineStatus.connected 
+            // ✅ FIX: Check correct property name "lineConnected"
+            const lineStatusHtml = state.lineStatus.lineConnected 
                 ? `<div class="bg-green-50 p-4 rounded-xl border border-green-100 flex justify-between items-center">
                      <div>
                         <div class="text-xs font-bold text-green-600 uppercase mb-1">LINE Notify Status</div>
@@ -1202,6 +1203,7 @@
             renderApp();
         }
 
+        // 🔥 MODIFIED: Render Calendar to Show Multi-day Events
         function renderCalendar(c) {
             const now = dayjs(state.currentDate);
             const monthStart = now.startOf('month');
@@ -1214,7 +1216,15 @@
                 const dateStr = d.format('D');
                 const isCurr = d.isSame(dayjs(), 'day');
                 const isOther = !d.isSame(monthStart, 'month');
-                const events = state.bookings.filter(b => dayjs(b.startDate).isSame(d, 'day') && b.status !== 'cancelled');
+                
+                // 🔍 FILTER LOGIC: Check if current day 'd' is BETWEEN startDate and endDate
+                const events = state.bookings.filter(b => {
+                    if(b.status === 'cancelled') return false;
+                    const tripStart = dayjs(b.startDate).startOf('day');
+                    const tripEnd = dayjs(b.endDate).endOf('day');
+                    // '[]' means inclusive of both start and end dates
+                    return d.isBetween(tripStart, tripEnd, 'day', '[]');
+                });
                 
                 days.push(`
                     <div class="calendar-day ${isOther?'other-month':''}">
@@ -1224,9 +1234,7 @@
                         <div class="flex-1 overflow-hidden space-y-1 px-1">
                             ${events.map(b => {
                                 if (b.status === 'maintenance') {
-                                    // 🔧 Distinct View for Maintenance/Day Off
                                     const isCar = !!b.carId;
-                                    // Handle populated object or ID string safely
                                     const carName = (b.carId && typeof b.carId === 'object') ? b.carId.name : (state.cars.find(c=>c._id===b.carId)?.name || 'Unknown Car');
                                     const driverName = (b.driverId && typeof b.driverId === 'object') ? b.driverId.name : (state.drivers.find(d=>d._id===b.driverId)?.name || 'Unknown Driver');
                                     
@@ -1236,9 +1244,16 @@
                                     
                                     return `<div onclick="showBookingDetails('${b._id}')" class="event-maintenance" title="${tooltip}">${text}</div>`;
                                 } else {
-                                    // 🚗 Standard Trip View
-                                    let display = `${b.startTime} ${b.remarks}`;
-                                    return `<div onclick="showBookingDetails('${b._id}')" class="event-pill status-${b.status} shadow-sm" title="${display}">${display}</div>`;
+                                    // Calculate if this day is start or end of trip for visuals (optional polish)
+                                    const isStart = d.isSame(dayjs(b.startDate), 'day');
+                                    const isEnd = d.isSame(dayjs(b.endDate), 'day');
+                                    let display = `${isStart ? b.startTime : '...'} ${b.remarks}`;
+                                    
+                                    // If spanning multiple days, make it look continuous
+                                    let styleClass = `status-${b.status} shadow-sm`;
+                                    if(!isStart) styleClass += ' opacity-80'; // Dim slightly if not the start day
+
+                                    return `<div onclick="showBookingDetails('${b._id}')" class="event-pill ${styleClass}" title="${b.remarks}">${display}</div>`;
                                 }
                             }).join('')}
                         </div>
